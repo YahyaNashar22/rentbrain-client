@@ -1,0 +1,10 @@
+{
+  "description": "Connect with professional experts for personalized consultations and project-based work, ensuring trust and satisfaction in a global marketplace.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
