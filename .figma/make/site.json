@@ -1,10 +1,15 @@
 {
-  "description": "Connect with professional experts for personalized consultations and project-based work, ensuring trust and satisfaction in a global marketplace.",
+  "title": "RentBrain — All Experts. One App.",
+  "description": "Find verified experts, book focused services, or post a job and compare applications on RentBrain.",
+  "language": "en",
   "robots": {
-    "index": false
+    "index": true
+  },
+  "icons": {
+    "icon": "/brand/mark-dark.jpeg"
   },
   "accessibility": {
-    "addBypassLinks": false,
+    "addBypassLinks": true,
     "ignoreReducedMotion": false
   }
 }
