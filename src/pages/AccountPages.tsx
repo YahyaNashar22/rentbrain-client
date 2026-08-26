@@ -10,7 +10,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useParams, useSearchParams } from "react-router-dom"
 import {
   Avatar,
   Button,
@@ -309,7 +309,9 @@ type PaymentRecord = {
     currency: string
     status: string
     refundedAmount: string
+    provider: string
     checkoutUrl?: string | null
+    failureReason?: string | null
     createdAt: string
   }
   booking: Booking
@@ -469,6 +471,9 @@ export function BookingsPage() {
                       Request refund
                     </Button>
                   )}
+                  {!isExpert && ["pending", "processing"].includes(payment?.status || "") && payment?.checkoutUrl && (
+                    <a className="btn btn-primary" href={payment.checkoutUrl}>Pay with Whish</a>
+                  )}
                 </div>
               </article>
             )
@@ -626,17 +631,49 @@ export function LegalPage() {
 
 export function CheckoutPage() {
   const { paymentId } = useParams()
+  const [searchParams] = useSearchParams()
   const [payment, setPayment] = useState<PaymentRecord["payment"]>()
   const [error, setError] = useState<unknown>()
   useEffect(() => {
-    void api<PaymentRecord[]>("/payments", { auth: true })
-      .then((rows) => {
+    let active = true
+    let checks = 0
+    let checking = false
+    const check = async () => {
+      if (checking) return
+      checking = true
+      try {
+        if (paymentId) {
+          await api(`/payments/${paymentId}/reconcile`, {
+            method: "POST",
+            auth: true,
+          })
+        }
+        const rows = await api<PaymentRecord[]>("/payments", { auth: true })
         const found = rows.find((row) => row.payment.id === paymentId)?.payment
         if (!found) throw new Error("Payment not found")
-        setPayment(found)
-      })
-      .catch(setError)
+        if (active) {
+          setPayment(found)
+          setError(undefined)
+        }
+      } catch (caught) {
+        if (active) setError(caught)
+      } finally {
+        checking = false
+      }
+    }
+    void check()
+    const timer = window.setInterval(() => {
+      checks += 1
+      if (checks >= 6) window.clearInterval(timer)
+      else void check()
+    }, 5_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
   }, [paymentId])
+  const redirectResult = searchParams.get("payment")
+  const pending = payment && ["pending", "processing"].includes(payment.status)
   return (
     <div className="container narrow section">
       <PageHeader eyebrow="Checkout" title="Complete your booking payment" />
@@ -649,15 +686,11 @@ export function CheckoutPage() {
             <CreditCard />
             <StatusBadge value={payment.status} />
             <h2>{formatMoney(payment.amount, payment.currency)}</h2>
-            <p>Your booking is reserved while payment is pending.</p>
-            <div className="alert">
-              <strong>Payment provider setup required</strong>
-              <span>
-                The included manual adapter records this checkout safely, but a
-                Wish Money or bank provider must be configured before live
-                payments can be accepted.
-              </span>
-            </div>
+            {payment.status === "succeeded" && <div className="alert alert-success"><strong>Payment confirmed</strong><span>Your Whish payment was verified and the booking is confirmed.</span></div>}
+            {pending && <div className="alert"><strong>{redirectResult === "failure" ? "Payment attempt unsuccessful" : "Waiting for payment"}</strong><span>{redirectResult === "failure" ? "The Whish payment link remains open, so you can retry with the same link." : "RentBrain is checking the payment directly with Whish. Your booking is confirmed only after verification."}</span></div>}
+            {payment.status === "failed" && <div className="alert alert-error"><strong>Payment link expired</strong><span>{payment.failureReason || "The payment was not completed."}</span></div>}
+            {payment.status === "refunded" && <div className="alert"><strong>Payment refunded</strong><span>The full payment was returned through Whish.</span></div>}
+            {pending && payment.checkoutUrl && <a className="btn btn-primary" href={payment.checkoutUrl}>Continue to Whish Pay</a>}
             <Link className="btn btn-secondary" to="/bookings">
               Return to bookings
             </Link>

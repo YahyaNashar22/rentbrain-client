@@ -20,8 +20,9 @@ function PanelState({ loading, error, children }: { loading: boolean; error: unk
 }
 
 type PaymentRow = {
-  payment: { id: string; amount: string; currency: string; status: string; refundedAmount: string };
+  payment: { id: string; provider: string; amount: string; currency: string; status: string; refundedAmount: string };
 };
+type ProviderBalance = { provider: string; currency: "USD" | "LBP"; balance: number; environment: string; automatedPayouts: boolean };
 type Payout = {
   id: string;
   expertId: number;
@@ -29,6 +30,10 @@ type Payout = {
   currency: string;
   status: string;
   providerReference?: string | null;
+};
+type PayoutRow = {
+  payout: Payout;
+  expert: { id: number; firstName: string; lastName: string; email: string; phone?: string | null };
 };
 type Refund = {
   id: string;
@@ -41,17 +46,25 @@ type Refund = {
 
 export function FinancePanel() {
   const [payments, setPayments] = useState<PaymentRow[]>();
-  const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const [refunds, setRefunds] = useState<Refund[]>([]);
+  const [providerBalance, setProviderBalance] = useState<ProviderBalance>();
+  const [balanceCurrency, setBalanceCurrency] = useState<"USD" | "LBP">("USD");
   const [error, setError] = useState<unknown>();
   const load = () => Promise.all([
     api<PaymentRow[]>("/admin/payments", { auth: true }),
-    api<Payout[]>("/admin/payouts", { auth: true }),
+    api<PayoutRow[]>("/admin/payouts", { auth: true }),
     api<Refund[]>("/admin/refunds", { auth: true }),
   ]).then(([paymentRows, payoutRows, refundRows]) => {
     setPayments(paymentRows); setPayouts(payoutRows); setRefunds(refundRows);
   }).catch(setError);
   useEffect(() => { void load(); }, []);
+
+  const loadProviderBalance = async () => {
+    try {
+      setProviderBalance(await api<ProviderBalance>(`/admin/payments/provider-balance?currency=${balanceCurrency}`, { auth: true }));
+    } catch (caught) { setError(caught); }
+  };
 
   const decideRefund = async (refund: Refund, decision: "approved" | "rejected") => {
     const adminNote = window.prompt("Decision note (required):");
@@ -83,17 +96,18 @@ export function FinancePanel() {
         <div><StatusBadge value={refund.status} /><h3>{formatMoney(refund.amount)}</h3><p>{refund.reason}</p><small>Payment {refund.paymentId}</small></div>
         <div className="inline-actions">
           {refund.status === "requested" && <><Button onClick={() => void decideRefund(refund, "approved")}>Approve</Button><Button variant="danger" onClick={() => void decideRefund(refund, "rejected")}>Reject</Button></>}
-          {refund.status === "processing" && <Button variant="secondary" onClick={() => void completeRefund(refund)}>Record completion</Button>}
+          {refund.status === "processing" && (payments?.find(({ payment }) => payment.id === refund.paymentId)?.payment.provider === "manual" ? <Button variant="secondary" onClick={() => void completeRefund(refund)}>Record completion</Button> : <small>Whish reconciliation in progress</small>)}
         </div>
       </article>)}</div> : <p className="muted">No refund requests.</p>}
     </section>
-    <section className="admin-section"><h2>Expert payouts</h2><div className="admin-table-wrap"><table className="admin-table">
+    <section className="admin-section"><div className="section-title"><div><h2>Whish merchant balance</h2><p>Read directly from the configured payment environment.</p></div><div className="inline-actions"><Select value={balanceCurrency} onChange={(event) => setBalanceCurrency(event.target.value as "USD" | "LBP")}><option value="USD">USD</option><option value="LBP">LBP</option></Select><Button variant="secondary" onClick={() => void loadProviderBalance()}>Refresh balance</Button></div></div>{providerBalance && <div className="alert alert-success"><strong>{formatMoney(providerBalance.balance, providerBalance.currency)}</strong><span>{providerBalance.provider} · {providerBalance.environment} environment</span></div>}</section>
+    <section className="admin-section"><h2>Expert payouts</h2><div className="alert"><strong>Payout ledger</strong><span>Whish Pay collects into RentBrain's merchant balance but does not expose provider transfers in this API. Pay the recorded net amount through the approved settlement process, then save its reference here.</span></div><div className="admin-table-wrap"><table className="admin-table">
       <thead><tr><th>Expert</th><th>Amount</th><th>Status</th><th>Update</th></tr></thead>
-      <tbody>{payouts.map((item) => <tr key={item.id}><td>#{item.expertId}</td><td>{formatMoney(item.amount, item.currency)}</td><td><StatusBadge value={item.status} /></td><td><Select value={item.status} onChange={(event) => void updatePayout(item, event.target.value as Parameters<typeof updatePayout>[1])}><option value="pending">Pending</option><option value="processing">Processing</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="held">Held</option></Select></td></tr>)}</tbody>
+      <tbody>{payouts.map(({ payout, expert }) => <tr key={payout.id}><td><strong>{expert.firstName} {expert.lastName}</strong><small>{expert.phone || expert.email}</small></td><td>{formatMoney(payout.amount, payout.currency)}</td><td><StatusBadge value={payout.status} /></td><td>{payout.status === "paid" ? <small>{payout.providerReference}</small> : <Select value={payout.status} onChange={(event) => void updatePayout(payout, event.target.value as Parameters<typeof updatePayout>[1])}><option value="pending">Pending</option><option value="processing">Processing</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="held">Held</option></Select>}</td></tr>)}</tbody>
     </table></div></section>
     <section className="admin-section"><h2>Payments</h2><div className="admin-table-wrap"><table className="admin-table">
-      <thead><tr><th>Reference</th><th>Amount</th><th>Refunded</th><th>Status</th></tr></thead>
-      <tbody>{payments?.map(({ payment }) => <tr key={payment.id}><td><small>{payment.id}</small></td><td>{formatMoney(payment.amount, payment.currency)}</td><td>{formatMoney(payment.refundedAmount, payment.currency)}</td><td><StatusBadge value={payment.status} /></td></tr>)}</tbody>
+      <thead><tr><th>Reference</th><th>Provider</th><th>Amount</th><th>Refunded</th><th>Status</th></tr></thead>
+      <tbody>{payments?.map(({ payment }) => <tr key={payment.id}><td><small>{payment.id}</small></td><td>{payment.provider}</td><td>{formatMoney(payment.amount, payment.currency)}</td><td>{formatMoney(payment.refundedAmount, payment.currency)}</td><td><StatusBadge value={payment.status} /></td></tr>)}</tbody>
     </table></div></section>
   </PanelState>;
 }

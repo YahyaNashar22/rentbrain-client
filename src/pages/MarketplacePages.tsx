@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import {
   BadgeCheck,
   CalendarDays,
@@ -189,6 +189,7 @@ export function ExpertDetailPage() {
   const [calendar, setCalendar] = useState<ExpertCalendar>()
   const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
+  const bookingIdempotencyKey = useRef(crypto.randomUUID())
 
   useEffect(() => {
     const from = new Date()
@@ -224,7 +225,7 @@ export function ExpertDetailPage() {
         {
           method: "POST",
           auth: true,
-          headers: { "Idempotency-Key": crypto.randomUUID() },
+          headers: { "Idempotency-Key": bookingIdempotencyKey.current },
           body: {
             serviceId: selected.id,
             startsAt: new Date(String(data.get("startsAt"))).toISOString(),
@@ -235,11 +236,19 @@ export function ExpertDetailPage() {
           },
         },
       )
-      navigate(
-        result.payment.checkoutUrl
-          ? new URL(result.payment.checkoutUrl).pathname
-          : "/bookings",
-      )
+      if (!result.payment.checkoutUrl) {
+        navigate("/bookings")
+      } else {
+        const checkoutUrl = new URL(
+          result.payment.checkoutUrl,
+          window.location.origin,
+        )
+        if (checkoutUrl.origin === window.location.origin) {
+          navigate(`${checkoutUrl.pathname}${checkoutUrl.search}`)
+        } else {
+          window.location.assign(checkoutUrl.toString())
+        }
+      }
     } catch (caught) {
       setError(caught)
     } finally {
