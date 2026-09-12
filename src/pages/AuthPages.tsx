@@ -114,6 +114,7 @@ export function LoginPage() {
           />
         </Field>
         <div className="form-meta form-meta-end">
+          <Link to="/resend-verification">Resend verification email</Link>
           <Link to="/forgot-password">Forgot password?</Link>
         </div>
         <Button busy={busy} type="submit">
@@ -128,7 +129,7 @@ export function RegisterPage() {
   const { user, register } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>()
-  const [sent, setSent] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState("")
   if (user) return <Navigate to="/dashboard" replace />
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -137,17 +138,18 @@ export function RegisterPage() {
     setError(undefined)
     const data = new FormData(event.currentTarget)
     try {
+      const email = String(data.get("email"))
       await register({
         firstName: String(data.get("firstName")),
         lastName: String(data.get("lastName")),
-        email: String(data.get("email")),
+        email,
         password: String(data.get("password")),
         timezone:
           Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Beirut",
         acceptTerms: true,
         acceptPrivacy: true,
       })
-      setSent(true)
+      setRegisteredEmail(email)
     } catch (caught) {
       setError(caught)
     } finally {
@@ -165,14 +167,23 @@ export function RegisterPage() {
         </>
       }
     >
-      {sent ? (
+      {registeredEmail ? (
         <div className="auth-success">
           <MailCheck />
           <h3>Check your inbox</h3>
           <p>We sent a verification link. Open it before signing in.</p>
-          <Link className="btn btn-primary" to="/login">
-            Go to sign in
-          </Link>
+          <p>Please check your spam or junk folder if you do not see it.</p>
+          <div className="form-stack">
+            <Link
+              className="btn btn-secondary"
+              to={`/resend-verification?email=${encodeURIComponent(registeredEmail)}`}
+            >
+              Resend verification email
+            </Link>
+            <Link className="btn btn-primary" to="/login">
+              Go to sign in
+            </Link>
+          </div>
         </div>
       ) : (
         <form className="form-stack" onSubmit={submit}>
@@ -399,10 +410,13 @@ export function ResetPasswordPage() {
 }
 
 export function ResendVerification() {
+  const [params] = useSearchParams()
   const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>()
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setBusy(true)
     setError(undefined)
     try {
       await api("/auth/resend-verification", {
@@ -412,6 +426,8 @@ export function ResendVerification() {
       setDone(true)
     } catch (caught) {
       setError(caught)
+    } finally {
+      setBusy(false)
     }
   }
   return (
@@ -421,15 +437,23 @@ export function ResendVerification() {
     >
       {done && (
         <SuccessMessage>
-          If the account is eligible, a new link is on its way.
+          If the account is eligible, a new link is on its way. Please check
+          your spam or junk folder if you do not see it.
         </SuccessMessage>
       )}
       <form className="form-stack" onSubmit={submit}>
         <ErrorMessage error={error} />
         <Field label="Email">
-          <Input name="email" type="email" required />
+          <Input
+            name="email"
+            type="email"
+            defaultValue={params.get("email") ?? ""}
+            required
+          />
         </Field>
-        <Button type="submit">Send link</Button>
+        <Button busy={busy} type="submit">
+          {done ? "Send another link" : "Send link"}
+        </Button>
       </form>
     </AuthFrame>
   )

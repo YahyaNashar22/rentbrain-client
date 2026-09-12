@@ -88,9 +88,15 @@ export function PageHeader({
   )
 }
 
-export function StatusBadge({ value }: { value: string }) {
-  const safe = value.toLowerCase().replace(/_/g, " ")
-  return <span className={`status status-${value.toLowerCase()}`}>{safe}</span>
+export function StatusBadge({ value }: { value?: string | null }) {
+  const normalized =
+    typeof value === "string" && value.trim() ? value.trim().toLowerCase() : "unknown"
+  const className = normalized.replace(/[^a-z0-9_-]/g, "-")
+  return (
+    <span className={`status status-${className}`}>
+      {normalized.replace(/_/g, " ")}
+    </span>
+  )
 }
 
 export function ErrorMessage({ error }: { error: unknown }) {

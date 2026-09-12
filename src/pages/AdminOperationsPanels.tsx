@@ -124,17 +124,17 @@ export function TaxonomyPanel() {
   }).catch(setError);
   useEffect(() => { void load(); }, []);
   const addCategory = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     try {
       await api("/admin/categories", { method: "POST", auth: true, body: { name: String(data.get("name")), slug: slugify(String(data.get("name"))), description: String(data.get("description")) || null, isActive: true } });
-      event.currentTarget.reset(); await load();
+      form.reset(); await load();
     } catch (caught) { setError(caught); }
   };
   const addSpecialization = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     try {
       await api("/admin/specializations", { method: "POST", auth: true, body: { categoryId: Number(data.get("categoryId")), name: String(data.get("name")), slug: slugify(String(data.get("name"))), isActive: true } });
-      event.currentTarget.reset(); await load();
+      form.reset(); await load();
     } catch (caught) { setError(caught); }
   };
   const renameCategory = async (category: Category) => {

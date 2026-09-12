@@ -99,9 +99,9 @@ export default function ExpertWorkspacePage() {
         <ProfileForm
           profile={profile}
           specializations={specializations}
-          onSaved={async () => {
+          onSaved={async (successMessage = "Expert profile saved.") => {
             await load()
-            notify("Expert profile saved.")
+            notify(successMessage)
           }}
           onError={setError}
         />
@@ -147,7 +147,7 @@ function ProfileForm({
 }: {
   profile: Expert | null
   specializations: Specialization[]
-  onSaved: () => Promise<void>
+  onSaved: (message?: string) => Promise<void>
   onError: (error: unknown) => void
 }) {
   const [busy, setBusy] = useState(false)
@@ -172,7 +172,7 @@ function ProfileForm({
           isPublished: data.get("isPublished") === "on",
         },
       })
-      await onSaved()
+      await onSaved("Expert profile saved.")
     } catch (caught) {
       onError(caught)
     } finally {
@@ -181,7 +181,8 @@ function ProfileForm({
   }
   const blockDate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const data = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const data = new FormData(form)
     setBusy(true)
     onError(undefined)
     try {
@@ -194,8 +195,8 @@ function ProfileForm({
           note: String(data.get("note")) || undefined,
         },
       })
-      event.currentTarget.reset()
-      onSaved()
+      form.reset()
+      await onSaved("Date blocked successfully.")
     } catch (caught) {
       onError(caught)
     } finally {
@@ -245,22 +246,35 @@ function ProfileForm({
           />
         </Field>
       </div>
-      <Field label="Specializations">
-        <select
-          className="control multi-select"
-          name="specializationIds"
-          multiple
-          defaultValue={
-            profile?.specializations?.map((item) => String(item.id)) ?? []
-          }
-        >
-          {specializations.map((item) => (
-            <option value={item.id} key={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <div className="field">
+        <span>Specializations</span>
+        {specializations.length ? (
+          <div className="specialization-picker">
+            {specializations.map((item) => (
+              <label className="check-row" key={item.id}>
+                <input
+                  name="specializationIds"
+                  type="checkbox"
+                  value={item.id}
+                  defaultChecked={profile?.specializations?.some(
+                    (selected) => selected.id === item.id,
+                  )}
+                />
+                <span>{item.name}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <div className="alert">
+            No specializations are configured yet. An administrator can add
+            them from Admin console → Categories.
+          </div>
+        )}
+        <small>
+          Choose every option that accurately describes your expertise.
+          Specializations are managed centrally by RentBrain administrators.
+        </small>
+      </div>
       {profile?.verificationStatus === "verified" ? (
         <label className="check-row">
           <input
@@ -307,7 +321,8 @@ function VerificationPanel({
   const [busy, setBusy] = useState(false)
   const upload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const data = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const data = new FormData(form)
     setBusy(true)
     onError(undefined)
     try {
@@ -316,8 +331,8 @@ function VerificationPanel({
         auth: true,
         body: data,
       })
+      form.reset()
       await onUploaded()
-      event.currentTarget.reset()
     } catch (caught) {
       onError(caught)
     } finally {
