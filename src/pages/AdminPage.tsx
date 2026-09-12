@@ -173,6 +173,11 @@ type Verification = {
   documents: Array<{ id: number; type: string; fileUrl: string; status: string; createdAt: string }>;
 };
 
+type VerificationResponse = {
+  profile: Verification["profile"] | Verification["profile"][];
+  documents: Verification["documents"];
+};
+
 function ExpertsPanel() {
   const [rows, setRows] = useState<ExpertRow[]>();
   const [selected, setSelected] = useState<Verification>();
@@ -180,11 +185,20 @@ function ExpertsPanel() {
   const load = () => api<ExpertRow[]>("/admin/experts", { auth: true }).then(setRows).catch(setError);
   useEffect(() => { void load(); }, []);
   const inspect = async (id: number) => {
-    try { setSelected(await api<Verification>(`/admin/experts/${id}/verification`, { auth: true })); }
+    try {
+      const response = await api<VerificationResponse>(`/admin/experts/${id}/verification`, { auth: true });
+      const profile = Array.isArray(response.profile) ? response.profile[0] : response.profile;
+      if (!profile) throw new Error("The expert verification profile is missing from the server response.");
+      setSelected({ profile, documents: response.documents });
+    }
     catch (caught) { setError(caught); }
   };
   const decide = async (status: "verified" | "rejected") => {
     if (!selected) return;
+    if (!Number.isInteger(selected.profile.userId)) {
+      setError(new Error("The expert identifier is missing. Close the review and reload the page."));
+      return;
+    }
     const note = window.prompt(status === "verified" ? "Optional internal note:" : "Explain what the expert should correct:") ?? undefined;
     if (status === "rejected" && !note) return;
     try {

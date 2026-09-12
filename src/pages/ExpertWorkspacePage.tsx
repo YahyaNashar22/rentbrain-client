@@ -151,6 +151,9 @@ function ProfileForm({
   onError: (error: unknown) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [selectedSpecializationIds, setSelectedSpecializationIds] = useState<number[]>(
+    () => profile?.specializations?.map((item) => item.id) ?? [],
+  )
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
@@ -168,7 +171,7 @@ function ProfileForm({
             .split(",")
             .map((item) => item.trim())
             .filter(Boolean),
-          specializationIds: data.getAll("specializationIds").map(Number),
+          specializationIds: selectedSpecializationIds,
           isPublished: data.get("isPublished") === "on",
         },
       })
@@ -247,22 +250,38 @@ function ProfileForm({
         </Field>
       </div>
       <div className="field">
-        <span>Specializations</span>
+        <div className="specialization-heading">
+          <span>Specializations</span>
+          <strong>
+            {selectedSpecializationIds.length} selected
+          </strong>
+        </div>
         {specializations.length ? (
           <div className="specialization-picker">
-            {specializations.map((item) => (
-              <label className="check-row" key={item.id}>
+            {specializations.map((item) => {
+              const selected = selectedSpecializationIds.includes(item.id)
+              return (
+              <label
+                className={`check-row${selected ? " selected" : ""}`}
+                key={item.id}
+              >
                 <input
                   name="specializationIds"
                   type="checkbox"
                   value={item.id}
-                  defaultChecked={profile?.specializations?.some(
-                    (selected) => selected.id === item.id,
-                  )}
+                  checked={selected}
+                  onChange={() =>
+                    setSelectedSpecializationIds((current) =>
+                      current.includes(item.id)
+                        ? current.filter((id) => id !== item.id)
+                        : [...current, item.id],
+                    )
+                  }
                 />
-                <span>{item.name}</span>
+                <strong>{item.name}</strong>
               </label>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="alert">
@@ -271,6 +290,7 @@ function ProfileForm({
           </div>
         )}
         <small>
+          Click one or more options. Click a selected option again to remove it.
           Choose every option that accurately describes your expertise.
           Specializations are managed centrally by RentBrain administrators.
         </small>
