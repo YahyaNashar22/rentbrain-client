@@ -218,10 +218,28 @@ function ExpertsPanel() {
   </div></PanelState>;
 }
 
+type AdminJobRow = {
+  job: Job;
+  owner: Pick<User, "id" | "firstName" | "lastName" | "email" | "phone">;
+  expert?: Pick<User, "id" | "firstName" | "lastName" | "email" | "phone"> | null;
+  contract?: {
+    id: string;
+    status: string;
+    subtotal: string;
+    total: string;
+    commissionAmount: string;
+    expertEarnings: string;
+    currency: string;
+    completedAt?: string | null;
+  } | null;
+  payment?: { id: string; status: string; amount: string; currency: string } | null;
+  payout?: { id: string; status: string; amount: string; currency: string; providerReference?: string | null } | null;
+};
+
 function JobsPanel() {
-  const [jobs, setJobs] = useState<Job[]>();
+  const [jobs, setJobs] = useState<AdminJobRow[]>();
   const [error, setError] = useState<unknown>();
-  const load = () => api<Job[]>("/admin/jobs", { auth: true }).then(setJobs).catch(setError);
+  const load = () => api<AdminJobRow[]>("/admin/jobs", { auth: true }).then(setJobs).catch(setError);
   useEffect(() => { void load(); }, []);
   const moderate = async (job: Job, status: "open" | "completed" | "cancelled" | "closed" | "moderated") => {
     const reason = window.prompt("Reason for this moderation action:");
@@ -230,7 +248,15 @@ function JobsPanel() {
     catch (caught) { setError(caught); }
   };
   return <PanelState loading={!jobs && !error} error={error}><div className="admin-table-wrap"><table className="admin-table">
-    <thead><tr><th>Job</th><th>Status</th><th>Budget</th><th>Created</th><th>Moderation</th></tr></thead>
-    <tbody>{jobs?.map((job) => <tr key={job.id}><td><strong>{job.title}</strong><small>{job.id}</small></td><td><StatusBadge value={job.status} /></td><td>{formatMoney(job.budgetMax || job.budgetMin, job.currency)}</td><td>{formatDate(job.createdAt)}</td><td><Select value={job.status} onChange={(event) => void moderate(job, event.target.value as Parameters<typeof moderate>[1])}><option value="open">Open</option><option value="pending_payment" disabled>Pending payment</option><option value="in_progress" disabled>In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="closed">Closed</option><option value="moderated">Moderated</option></Select></td></tr>)}</tbody>
+    <thead><tr><th>Job</th><th>Client / owner</th><th>Assigned expert</th><th>Contract & payment</th><th>Expert settlement</th><th>Status</th><th>Created</th><th>Moderation</th></tr></thead>
+    <tbody>{jobs?.map(({ job, owner, expert, contract, payment, payout }) => <tr key={job.id}>
+      <td><strong>{job.title}</strong><small>{job.id}</small><small>Budget {formatMoney(job.budgetMax || job.budgetMin, job.currency)}</small></td>
+      <td><strong>{owner.firstName} {owner.lastName}</strong><small>{owner.phone || "No phone provided"}</small><small>{owner.email}</small></td>
+      <td>{expert ? <><strong>{expert.firstName} {expert.lastName}</strong><small>Contact / possible Whish: {expert.phone || "No phone provided"}</small><small>{expert.email}</small></> : <small>No expert assigned</small>}</td>
+      <td>{contract ? <><StatusBadge value={contract.status} /><strong>{formatMoney(contract.total, contract.currency)} client total</strong><small>Quote {formatMoney(contract.subtotal, contract.currency)} · Expert net {formatMoney(contract.expertEarnings, contract.currency)}</small><small>Payment: {payment?.status ?? "not created"}</small></> : <small>No quotation accepted</small>}</td>
+      <td>{payout ? <><StatusBadge value={payout.status} /><strong>{formatMoney(payout.amount, payout.currency)}</strong>{payout.providerReference && <small>Ref: {payout.providerReference}</small>}</> : contract?.status === "completed" ? <small>No payout record</small> : <small>Available after completion</small>}</td>
+      <td><StatusBadge value={job.status} /></td><td>{formatDate(job.createdAt)}</td>
+      <td><Select value={job.status} onChange={(event) => void moderate(job, event.target.value as Parameters<typeof moderate>[1])}><option value="open">Open</option><option value="pending_payment" disabled>Pending payment</option><option value="in_progress" disabled>In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="closed">Closed</option><option value="moderated">Moderated</option></Select></td>
+    </tr>)}</tbody>
   </table></div></PanelState>;
 }

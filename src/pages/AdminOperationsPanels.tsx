@@ -20,12 +20,15 @@ function PanelState({ loading, error, children }: { loading: boolean; error: unk
 }
 
 type PaymentRow = {
-  payment: { id: string; provider: string; amount: string; currency: string; status: string; refundedAmount: string };
-  booking?: { id: string; subtotal: string; clientFee: string; commissionAmount: string; expertEarnings: string } | null;
+  payment: { id: string; provider: string; amount: string; currency: string; status: string; refundedAmount: string; paidAt?: string | null };
+  booking?: { id: string; status: string; startsAt: string; completedAt?: string | null; subtotal: string; clientFee: string; commissionAmount: string; expertEarnings: string } | null;
   service?: { id: number; title: string } | null;
-  jobContract?: { id: string; subtotal: string; clientFee: string; commissionAmount: string; expertEarnings: string } | null;
+  jobContract?: { id: string; status: string; completedAt?: string | null; subtotal: string; clientFee: string; commissionAmount: string; expertEarnings: string } | null;
   job?: { id: string; title: string } | null;
+  client?: Party | null;
+  expert?: Party | null;
 };
+type Party = { id: number; firstName: string; lastName: string; email: string; phone?: string | null };
 type FinanceOverview = {
   byCurrency: Array<{ currency: string; transactions: number; grossCollected: string; refunded: string; platformRevenue: string; providerEarnings: string }>;
   daily: Array<{ date: string; currency: string; grossCollected: string; platformRevenue: string }>;
@@ -35,6 +38,8 @@ type ProviderBalance = { provider: string; currency: "USD" | "LBP"; balance: num
 type Payout = {
   id: string;
   expertId: number;
+  bookingId?: string | null;
+  jobContractId?: string | null;
   amount: string;
   currency: string;
   status: string;
@@ -42,7 +47,13 @@ type Payout = {
 };
 type PayoutRow = {
   payout: Payout;
-  expert: { id: number; firstName: string; lastName: string; email: string; phone?: string | null };
+  payment?: PaymentRow["payment"] | null;
+  booking?: PaymentRow["booking"];
+  service?: PaymentRow["service"];
+  jobContract?: PaymentRow["jobContract"];
+  job?: PaymentRow["job"];
+  expert: Party;
+  client?: Party | null;
 };
 type Refund = {
   id: string;
@@ -151,13 +162,29 @@ export function FinancePanel() {
       </article>})}</div> : <p className="muted">No refund requests.</p>}
     </section>
     <section className="admin-section"><div className="section-title"><div><h2>Whish merchant balance</h2><p>Cash held by Whish for RentBrain. This is not commission and includes money owed to providers.</p></div><div className="inline-actions"><Select value={balanceCurrency} onChange={(event) => setBalanceCurrency(event.target.value as "USD" | "LBP")}><option value="USD">USD</option><option value="LBP">LBP</option></Select><Button variant="secondary" onClick={() => void loadProviderBalance()}>Refresh balance</Button></div></div>{providerBalance && <div className="alert alert-success"><strong>{formatMoney(providerBalance.balance, providerBalance.currency)}</strong><span>{providerBalance.provider} · {providerBalance.environment} environment · reconcile against provider earnings and Whish fees</span></div>}</section>
-    <section className="admin-section"><h2>Expert payouts</h2><div className="alert"><strong>Payout ledger</strong><span>Whish Pay collects into RentBrain's merchant balance but does not expose provider transfers in this API. Pay the recorded net amount through the approved settlement process, then save its reference here.</span></div><div className="admin-table-wrap"><table className="admin-table">
-      <thead><tr><th>Expert</th><th>Amount</th><th>Status</th><th>Update</th></tr></thead>
-      <tbody>{payouts.map(({ payout, expert }) => <tr key={payout.id}><td><strong>{expert.firstName} {expert.lastName}</strong><small>{expert.phone || expert.email}</small></td><td>{formatMoney(payout.amount, payout.currency)}</td><td><StatusBadge value={payout.status} /></td><td>{payout.status === "paid" ? <small>{payout.providerReference}</small> : <Select value={payout.status} onChange={(event) => void updatePayout(payout, event.target.value as Parameters<typeof updatePayout>[1])}><option value="pending">Pending</option><option value="processing">Processing</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="held">Held</option></Select>}</td></tr>)}</tbody>
+    <section className="admin-section"><h2>Expert payouts</h2><div className="alert"><strong>Ready-to-settle work</strong><span>A payout appears only after the job or session is completed. Transfer the exact expert net amount externally, verify the expert's destination directly (their profile phone is not guaranteed to be a Whish wallet), then mark it paid and save the transaction reference.</span></div><div className="admin-table-wrap"><table className="admin-table">
+      <thead><tr><th>Work</th><th>Client / owner</th><th>Expert to pay</th><th>Net payout</th><th>Completed</th><th>Status</th><th>Settlement</th></tr></thead>
+      <tbody>{payouts.map(({ payout, expert, client, booking, service, jobContract, job, payment }) => {
+        const completedAt = booking?.completedAt ?? jobContract?.completedAt;
+        return <tr key={payout.id}>
+          <td><strong>{job?.title ?? service?.title ?? "Service session"}</strong><small>{jobContract ? `Job · ${jobContract.id}` : `Session · ${booking?.id ?? payout.bookingId}`}</small>{payment && <small>Payment · {payment.id}</small>}</td>
+          <td>{client ? <><strong>{client.firstName} {client.lastName}</strong><small>{client.phone || "No phone provided"}</small><small>{client.email}</small></> : <small>Client unavailable</small>}</td>
+          <td><strong>{expert.firstName} {expert.lastName}</strong><small>Contact / possible Whish: {expert.phone || "No phone provided"}</small><small>{expert.email}</small></td>
+          <td><strong>{formatMoney(payout.amount, payout.currency)}</strong><small>Expert net after commission</small></td>
+          <td>{completedAt ? formatDate(completedAt) : <small>Completion date unavailable</small>}</td>
+          <td><StatusBadge value={payout.status} /></td>
+          <td>{payout.status === "paid" ? <><small>Paid {payout.providerReference ? `· ${payout.providerReference}` : ""}</small></> : <Select value={payout.status} onChange={(event) => void updatePayout(payout, event.target.value as Parameters<typeof updatePayout>[1])}><option value="pending">Pending</option><option value="processing">Processing</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="held">Held</option></Select>}</td>
+        </tr>;
+      })}</tbody>
     </table></div></section>
     <section className="admin-section"><h2>Payments</h2><div className="admin-table-wrap"><table className="admin-table">
-      <thead><tr><th>Work</th><th>Reference</th><th>Client paid</th><th>Platform revenue</th><th>Provider net</th><th>Refunded</th><th>Status</th></tr></thead>
-      <tbody>{payments?.map(({ payment, booking, service, jobContract, job }) => { const source = booking ?? jobContract; return <tr key={payment.id}><td><strong>{job?.title ?? service?.title ?? "Service booking"}</strong><small>{jobContract ? "Job quotation" : "Scheduled service"}</small></td><td><small>{payment.id}</small><small>{payment.provider}</small></td><td>{formatMoney(payment.amount, payment.currency)}</td><td>{formatMoney(Number(source?.commissionAmount ?? 0) + Number(source?.clientFee ?? 0), payment.currency)}</td><td>{formatMoney(source?.expertEarnings, payment.currency)}</td><td>{formatMoney(payment.refundedAmount, payment.currency)}</td><td><StatusBadge value={payment.status} /></td></tr>})}</tbody>
+      <thead><tr><th>Work</th><th>Client / owner</th><th>Assigned expert</th><th>Reference</th><th>Client paid</th><th>Platform revenue</th><th>Expert net</th><th>Refunded</th><th>Status</th></tr></thead>
+      <tbody>{payments?.map(({ payment, booking, service, jobContract, job, client, expert }) => { const source = booking ?? jobContract; return <tr key={payment.id}>
+        <td><strong>{job?.title ?? service?.title ?? "Service booking"}</strong><small>{jobContract ? "Job quotation" : "Scheduled service"}</small></td>
+        <td>{client ? <><strong>{client.firstName} {client.lastName}</strong><small>{client.phone || client.email}</small></> : <small>Unavailable</small>}</td>
+        <td>{expert ? <><strong>{expert.firstName} {expert.lastName}</strong><small>{expert.phone || expert.email}</small></> : <small>Unavailable</small>}</td>
+        <td><small>{payment.id}</small><small>{payment.provider}</small></td><td>{formatMoney(payment.amount, payment.currency)}</td><td>{formatMoney(Number(source?.commissionAmount ?? 0) + Number(source?.clientFee ?? 0), payment.currency)}</td><td>{formatMoney(source?.expertEarnings, payment.currency)}</td><td>{formatMoney(payment.refundedAmount, payment.currency)}</td><td><StatusBadge value={payment.status} /></td>
+      </tr>})}</tbody>
     </table></div></section>
   </PanelState>;
 }
