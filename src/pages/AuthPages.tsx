@@ -71,6 +71,9 @@ export function LoginPage() {
   const location = useLocation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>()
+  const passwordChanged = Boolean(
+    (location.state as { passwordChanged?: boolean } | null)?.passwordChanged,
+  )
   if (user) return <Navigate to="/dashboard" replace />
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -101,6 +104,11 @@ export function LoginPage() {
       }
     >
       <form className="form-stack" onSubmit={submit}>
+        {passwordChanged && (
+          <SuccessMessage>
+            Password changed successfully. Sign in with your new password.
+          </SuccessMessage>
+        )}
         <ErrorMessage error={error} />
         <Field label="Email">
           <Input name="email" type="email" autoComplete="email" required />

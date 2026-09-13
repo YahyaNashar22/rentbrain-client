@@ -6,11 +6,12 @@ import {
   Camera,
   CheckCircle2,
   CreditCard,
+  KeyRound,
   ShieldCheck,
   Star,
   UserRound,
 } from "lucide-react"
-import { Link, useParams, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   Avatar,
   Button,
@@ -172,10 +173,13 @@ function SearchGlyph() {
 }
 
 export function ProfilePage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
+  const navigate = useNavigate()
   const [error, setError] = useState<unknown>()
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
+  const [passwordError, setPasswordError] = useState<unknown>()
+  const [passwordBusy, setPasswordBusy] = useState(false)
   if (!user) return null
   const update = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -218,6 +222,40 @@ export function ProfilePage() {
       setError(caught)
     } finally {
       setBusy(false)
+    }
+  }
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const newPassword = String(data.get("newPassword"))
+    const confirmNewPassword = String(data.get("confirmNewPassword"))
+    setPasswordError(undefined)
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError(new Error("New passwords do not match"))
+      return
+    }
+    setPasswordBusy(true)
+    try {
+      await api("/users/me/password", {
+        method: "PATCH",
+        auth: true,
+        body: {
+          currentPassword: String(data.get("currentPassword")),
+          newPassword,
+          confirmNewPassword,
+        },
+      })
+      form.reset()
+      await logout()
+      navigate("/login", {
+        replace: true,
+        state: { passwordChanged: true },
+      })
+    } catch (caught) {
+      setPasswordError(caught)
+    } finally {
+      setPasswordBusy(false)
     }
   }
   return (
@@ -297,6 +335,57 @@ export function ProfilePage() {
         </label>
         <Button busy={busy} type="submit">
           Save profile
+        </Button>
+      </form>
+      <form className="content-card form-stack" onSubmit={changePassword}>
+        <div className="section-title">
+          <div>
+            <h2>Change password</h2>
+            <p>
+              Confirm your current password before choosing a new one. You will
+              need to sign in again, and other sessions will no longer be able
+              to refresh.
+            </p>
+          </div>
+          <KeyRound aria-hidden size={28} />
+        </div>
+        <ErrorMessage error={passwordError} />
+        <Field label="Current password">
+          <Input
+            name="currentPassword"
+            type="password"
+            autoComplete="current-password"
+            maxLength={128}
+            required
+          />
+        </Field>
+        <div className="form-grid">
+          <Field
+            label="New password"
+            hint="At least 10 characters with uppercase, lowercase, and a number."
+          >
+            <Input
+              name="newPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength={10}
+              maxLength={128}
+              required
+            />
+          </Field>
+          <Field label="Confirm new password">
+            <Input
+              name="confirmNewPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength={10}
+              maxLength={128}
+              required
+            />
+          </Field>
+        </div>
+        <Button busy={passwordBusy} type="submit">
+          Change password
         </Button>
       </form>
     </>
