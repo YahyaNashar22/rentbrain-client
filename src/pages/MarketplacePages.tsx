@@ -20,10 +20,15 @@ import {
   Loading,
   PageHeader,
   Select,
+  SuccessMessage,
   formatMoney,
 } from "../components/ui"
 import { useAuth } from "../context/AuthContext"
 import { api, assetUrl, queryString } from "../lib/api"
+import {
+  buildAvailableSlots,
+  type AvailabilityCalendar,
+} from "../lib/availability"
 import type {
   Category,
   Expert,
@@ -60,6 +65,7 @@ export function ExpertsPage() {
         search: String(data.get("search")),
         categoryId: String(data.get("categoryId")),
         minRating: String(data.get("minRating")),
+        sort: String(data.get("sort")),
       }).slice(1),
     )
   }
@@ -98,8 +104,18 @@ export function ExpertsPage() {
         <Field label="Minimum rating">
           <Select name="minRating" defaultValue={params.get("minRating") ?? ""}>
             <option value="">Any rating</option>
+            <option value="1">1+ stars</option>
+            <option value="2">2+ stars</option>
+            <option value="3">3+ stars</option>
             <option value="4">4+ stars</option>
             <option value="4.5">4.5+ stars</option>
+          </Select>
+        </Field>
+        <Field label="Sort by">
+          <Select name="sort" defaultValue={params.get("sort") ?? "rating"}>
+            <option value="rating">Highest rated</option>
+            <option value="reviews">Most reviewed</option>
+            <option value="experience">Most experienced</option>
           </Select>
         </Field>
         <Button type="submit">Search</Button>
@@ -171,33 +187,41 @@ type Review = {
   rating: number
   comment?: string | null
   createdAt: string
+  sourceType: "booking" | "job_contract"
+  workTitle: string
   client: { firstName: string; lastName: string }
 }
-type ExpertCalendar = {
-  rules: Array<{ weekday: number; startTime: string; endTime: string; timezone: string }>
-  overrides: Array<{ date: string; isAvailable: boolean }>
-  busy: Array<{ startsAt: string; endsAt: string }>
+type ReviewEligibility = {
+  sourceId: string
+  sourceType: "booking" | "job_contract"
+  title: string
+  completedAt?: string | null
 }
-
 export function ExpertDetailPage() {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [expert, setExpert] = useState<Expert | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
+  const [reviewEligibility, setReviewEligibility] = useState<ReviewEligibility[]>([])
+  const [reviewError, setReviewError] = useState<unknown>()
+  const [reviewSuccess, setReviewSuccess] = useState(false)
+  const [reviewBusy, setReviewBusy] = useState(false)
   const [selected, setSelected] = useState<Service | null>(null)
-  const [calendar, setCalendar] = useState<ExpertCalendar>()
+  const [calendar, setCalendar] = useState<AvailabilityCalendar>()
   const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const bookingIdempotencyKey = useRef(crypto.randomUUID())
 
   useEffect(() => {
-    const from = new Date()
-    const to = new Date(Date.now() + 30 * 86_400_000)
+    // Pad the UTC query range so the expert's current local date is included
+    // even when the client and expert are on opposite sides of midnight.
+    const from = new Date(Date.now() - 86_400_000)
+    const to = new Date(Date.now() + 31 * 86_400_000)
     void Promise.all([
       api<Expert>(`/marketplace/experts/${id}`),
       api<Review[]>(`/reviews/experts/${id}`),
-      api<ExpertCalendar>(
+      api<AvailabilityCalendar>(
         `/marketplace/experts/${id}/calendar${queryString({ from: from.toISOString(), to: to.toISOString() })}`,
       ),
     ])
@@ -208,6 +232,35 @@ export function ExpertDetailPage() {
       })
       .catch(setError)
   }, [id])
+
+  useEffect(() => {
+    if (!user || !id || user.id === Number(id)) {
+      setReviewEligibility([])
+      return
+    }
+    void api<ReviewEligibility[]>(`/reviews/experts/${id}/eligibility`, {
+      auth: true,
+    })
+      .then(setReviewEligibility)
+      .catch(setReviewError)
+  }, [id, user])
+
+  const availableSlots = useMemo(
+    () =>
+      selected
+        ? buildAvailableSlots(calendar, selected.durationMinutes)
+        : [],
+    [calendar, selected],
+  )
+  const slotsByDate = useMemo(() => {
+    const groups = new Map<string, typeof availableSlots>()
+    for (const slot of availableSlots) {
+      const group = groups.get(slot.dateLabel) ?? []
+      group.push(slot)
+      groups.set(slot.dateLabel, group)
+    }
+    return [...groups.entries()]
+  }, [availableSlots])
 
   const book = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -253,6 +306,46 @@ export function ExpertDetailPage() {
       setError(caught)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const submitReview = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!id) return
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const [sourceType, sourceId] = String(data.get("work")).split(":", 2)
+    setReviewBusy(true)
+    setReviewError(undefined)
+    setReviewSuccess(false)
+    try {
+      await api("/reviews", {
+        method: "POST",
+        auth: true,
+        body: {
+          ...(sourceType === "booking"
+            ? { bookingId: sourceId }
+            : { jobContractId: sourceId }),
+          rating: Number(data.get("rating")),
+          comment: String(data.get("comment") || "") || undefined,
+        },
+      })
+      const [profile, feedback, eligibility] = await Promise.all([
+        api<Expert>(`/marketplace/experts/${id}`),
+        api<Review[]>(`/reviews/experts/${id}`),
+        api<ReviewEligibility[]>(`/reviews/experts/${id}/eligibility`, {
+          auth: true,
+        }),
+      ])
+      setExpert(profile)
+      setReviews(feedback)
+      setReviewEligibility(eligibility)
+      setReviewSuccess(true)
+      form.reset()
+    } catch (caught) {
+      setReviewError(caught)
+    } finally {
+      setReviewBusy(false)
     }
   }
 
@@ -357,7 +450,65 @@ export function ExpertDetailPage() {
           <section>
             <div className="section-title">
               <h2>Client reviews</h2>
+              <p>Ratings below come from clients with completed work.</p>
             </div>
+            <ErrorMessage error={reviewError} />
+            {reviewSuccess && (
+              <SuccessMessage>Your review is now public. Thank you.</SuccessMessage>
+            )}
+            {reviewEligibility.length > 0 && (
+              <div className="review-form-card">
+                <h3>Share your experience</h3>
+                <p className="muted">
+                  Select completed work, then leave one verified review for it.
+                </p>
+                <form className="form-stack" onSubmit={submitReview}>
+                  <Field label="Completed work">
+                    <Select name="work" required defaultValue="">
+                      <option value="" disabled>Select completed work</option>
+                      {reviewEligibility.map((item) => (
+                        <option
+                          key={`${item.sourceType}:${item.sourceId}`}
+                          value={`${item.sourceType}:${item.sourceId}`}
+                        >
+                          {item.title} ({item.sourceType === "booking" ? "service" : "job"})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Rating">
+                    <Select name="rating" required defaultValue="5">
+                      <option value="5">5 stars</option>
+                      <option value="4">4 stars</option>
+                      <option value="3">3 stars</option>
+                      <option value="2">2 stars</option>
+                      <option value="1">1 star</option>
+                    </Select>
+                  </Field>
+                  <Field label="Review">
+                    <textarea
+                      className="control"
+                      name="comment"
+                      maxLength={3000}
+                      rows={4}
+                      placeholder="Tell others about your experience…"
+                    />
+                  </Field>
+                  <Button busy={reviewBusy} type="submit">Publish review</Button>
+                </form>
+              </div>
+            )}
+            {!user && (
+              <p className="muted review-guidance">
+                <Link to="/login" state={{ from: `/experts/${id}` }}>Sign in</Link>{" "}
+                to review this expert after your service or job is completed.
+              </p>
+            )}
+            {user && user.id !== expert.userId && !reviewEligibility.length && !reviewSuccess && (
+              <p className="muted review-guidance">
+                You can review this expert after they complete a service booking or paid job for you.
+              </p>
+            )}
             {reviews.length ? (
               <div className="review-list">
                 {reviews.map((review) => (
@@ -372,6 +523,7 @@ export function ExpertDetailPage() {
                       ))}
                     </div>
                     <p>{review.comment || "Rating only"}</p>
+                    <small className="review-work">Verified {review.sourceType === "booking" ? "service" : "job"}: {review.workTitle}</small>
                     <small>
                       {review.client.firstName} {review.client.lastName}
                     </small>
@@ -397,18 +549,36 @@ export function ExpertDetailPage() {
                       {weekdayNames[rule.weekday]} · {rule.startTime.slice(0, 5)}–{rule.endTime.slice(0, 5)}
                     </span>
                   ))}
-                  <small>Shown in {calendar.rules[0]?.timezone}. Blocked dates and existing bookings are checked at checkout.</small>
+                  <small>Shown in {calendar.rules[0]?.timezone}. Blocked dates and booked times are excluded below.</small>
                 </div>
               ) : (
                 <div className="alert">This expert has not published booking hours yet.</div>
               )}
-              <Field label="Preferred date and time">
-                <Input
+              <Field label="Available date and time">
+                <Select
+                  key={selected.id}
                   name="startsAt"
-                  type="datetime-local"
-                  min={minimumLocalDate()}
+                  disabled={!availableSlots.length}
                   required
-                />
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    {calendar
+                      ? availableSlots.length
+                        ? "Choose an available time"
+                        : "No times available in the next 30 days"
+                      : "Loading available times…"}
+                  </option>
+                  {slotsByDate.map(([dateLabel, slots]) => (
+                    <optgroup key={dateLabel} label={dateLabel}>
+                      {slots.map((slot) => (
+                        <option key={slot.iso} value={slot.iso}>
+                          {slot.timeLabel}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Select>
               </Field>
               <Field label="Meeting method">
                 <Select name="meetingMethod">
@@ -448,9 +618,4 @@ export function ExpertDetailPage() {
   )
 }
 
-const minimumLocalDate = () => {
-  const date = new Date(Date.now() + 10 * 60_000)
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
-  return date.toISOString().slice(0, 16)
-}
 const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]

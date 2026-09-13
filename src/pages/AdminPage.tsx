@@ -119,8 +119,7 @@ function OverviewPanel() {
           <Metric label="Verified experts" value={data.experts.verified} note={`${data.experts.total} profiles`} />
           <Metric label="Open jobs" value={data.jobs.open} note={`${data.jobs.applications} applications`} />
           <Metric label="Completed bookings" value={data.bookings.completed} note={`${data.bookings.total} total`} />
-          <Metric label="Gross payment volume" value={formatMoney(data.payments.grossVolume)} note={`${data.payments.successfulPayments} successful`} />
-          <Metric label="Platform commission" value={formatMoney(data.payments.commission)} note={`${formatMoney(data.payments.refunded)} refunded`} />
+          <Metric label="Successful payments" value={data.payments.successfulPayments} note="See Finance for totals by currency" />
         </>}
       </div>
       <div className="alert"><strong>Launch checklist</strong><span>Publish reviewed policies, set the approved commission, connect the selected payment provider, and configure Gmail before accepting live customers.</span></div>
@@ -232,6 +231,6 @@ function JobsPanel() {
   };
   return <PanelState loading={!jobs && !error} error={error}><div className="admin-table-wrap"><table className="admin-table">
     <thead><tr><th>Job</th><th>Status</th><th>Budget</th><th>Created</th><th>Moderation</th></tr></thead>
-    <tbody>{jobs?.map((job) => <tr key={job.id}><td><strong>{job.title}</strong><small>{job.id}</small></td><td><StatusBadge value={job.status} /></td><td>{formatMoney(job.budgetMax || job.budgetMin, job.currency)}</td><td>{formatDate(job.createdAt)}</td><td><Select value={job.status} onChange={(event) => void moderate(job, event.target.value as Parameters<typeof moderate>[1])}><option value="open">Open</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="closed">Closed</option><option value="moderated">Moderated</option></Select></td></tr>)}</tbody>
+    <tbody>{jobs?.map((job) => <tr key={job.id}><td><strong>{job.title}</strong><small>{job.id}</small></td><td><StatusBadge value={job.status} /></td><td>{formatMoney(job.budgetMax || job.budgetMin, job.currency)}</td><td>{formatDate(job.createdAt)}</td><td><Select value={job.status} onChange={(event) => void moderate(job, event.target.value as Parameters<typeof moderate>[1])}><option value="open">Open</option><option value="pending_payment" disabled>Pending payment</option><option value="in_progress" disabled>In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="closed">Closed</option><option value="moderated">Moderated</option></Select></td></tr>)}</tbody>
   </table></div></PanelState>;
 }

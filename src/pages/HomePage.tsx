@@ -34,7 +34,7 @@ export default function HomePage() {
               <Sparkles size={17} /> Expertise, when you need it
             </div>
             <h1>
-              One place for the <span>right expert.</span>
+              The World's Sharpest Minds. <span>One Platform.</span>
             </h1>
             <p>
               Book a focused session or post a real-world need—from product

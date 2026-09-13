@@ -21,6 +21,15 @@ function PanelState({ loading, error, children }: { loading: boolean; error: unk
 
 type PaymentRow = {
   payment: { id: string; provider: string; amount: string; currency: string; status: string; refundedAmount: string };
+  booking?: { id: string; subtotal: string; clientFee: string; commissionAmount: string; expertEarnings: string } | null;
+  service?: { id: number; title: string } | null;
+  jobContract?: { id: string; subtotal: string; clientFee: string; commissionAmount: string; expertEarnings: string } | null;
+  job?: { id: string; title: string } | null;
+};
+type FinanceOverview = {
+  byCurrency: Array<{ currency: string; transactions: number; grossCollected: string; refunded: string; platformRevenue: string; providerEarnings: string }>;
+  daily: Array<{ date: string; currency: string; grossCollected: string; platformRevenue: string }>;
+  payouts: Array<{ currency: string; status: string; amount: string; count: number }>;
 };
 type ProviderBalance = { provider: string; currency: "USD" | "LBP"; balance: number; environment: string; automatedPayouts: boolean };
 type Payout = {
@@ -49,14 +58,16 @@ export function FinancePanel() {
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [providerBalance, setProviderBalance] = useState<ProviderBalance>();
+  const [overview, setOverview] = useState<FinanceOverview>();
   const [balanceCurrency, setBalanceCurrency] = useState<"USD" | "LBP">("USD");
   const [error, setError] = useState<unknown>();
   const load = () => Promise.all([
     api<PaymentRow[]>("/admin/payments", { auth: true }),
     api<PayoutRow[]>("/admin/payouts", { auth: true }),
     api<Refund[]>("/admin/refunds", { auth: true }),
-  ]).then(([paymentRows, payoutRows, refundRows]) => {
-    setPayments(paymentRows); setPayouts(payoutRows); setRefunds(refundRows);
+    api<FinanceOverview>("/admin/finance/overview", { auth: true }),
+  ]).then(([paymentRows, payoutRows, refundRows, financeOverview]) => {
+    setPayments(paymentRows); setPayouts(payoutRows); setRefunds(refundRows); setOverview(financeOverview);
   }).catch(setError);
   useEffect(() => { void load(); }, []);
 
@@ -91,6 +102,22 @@ export function FinancePanel() {
   };
 
   return <PanelState loading={!payments && !error} error={error}>
+    {overview?.byCurrency.map((summary) => <section className="admin-section" key={summary.currency}>
+      <div className="section-title"><div><h2>{summary.currency} financial summary</h2><p>RentBrain ledger values after recorded refunds. Whish processing fees are separate.</p></div></div>
+      <div className="admin-metrics">
+        <FinanceMetric label="Collected" value={formatMoney(summary.grossCollected, summary.currency)} note={`${summary.transactions} successful payments`} />
+        <FinanceMetric label="Platform revenue" value={formatMoney(summary.platformRevenue, summary.currency)} note="Commission + client fees" />
+        <FinanceMetric label="Provider allocation" value={formatMoney(summary.providerEarnings, summary.currency)} note="Net reserved after commission" />
+        <FinanceMetric label="Refunded" value={formatMoney(summary.refunded, summary.currency)} note="Returned to clients" />
+      </div>
+    </section>)}
+    {overview?.daily.length ? <section className="admin-section"><h2>Collections · last 30 days</h2><div className="finance-chart">
+      {overview.daily.map((day) => {
+        const currencyMax = Math.max(...overview.daily.filter((item) => item.currency === day.currency).map((item) => Number(item.grossCollected)), 1);
+        const height = Math.max(4, Math.round(Number(day.grossCollected) / currencyMax * 100));
+        return <div className="finance-chart-column" key={`${day.date}-${day.currency}`} title={`${day.date}: ${formatMoney(day.grossCollected, day.currency)}`}><div className="finance-chart-bar" style={{ height: `${height}%` }} /><small>{day.date.slice(5)}</small><span>{day.currency}</span></div>;
+      })}
+    </div></section> : null}
     <section className="admin-section"><h2>Refund requests</h2>
       {refunds.length ? <div className="compact-list">{refunds.map((refund) => <article key={refund.id}>
         <div><StatusBadge value={refund.status} /><h3>{formatMoney(refund.amount)}</h3><p>{refund.reason}</p><small>Payment {refund.paymentId}</small></div>
@@ -100,16 +127,20 @@ export function FinancePanel() {
         </div>
       </article>)}</div> : <p className="muted">No refund requests.</p>}
     </section>
-    <section className="admin-section"><div className="section-title"><div><h2>Whish merchant balance</h2><p>Read directly from the configured payment environment.</p></div><div className="inline-actions"><Select value={balanceCurrency} onChange={(event) => setBalanceCurrency(event.target.value as "USD" | "LBP")}><option value="USD">USD</option><option value="LBP">LBP</option></Select><Button variant="secondary" onClick={() => void loadProviderBalance()}>Refresh balance</Button></div></div>{providerBalance && <div className="alert alert-success"><strong>{formatMoney(providerBalance.balance, providerBalance.currency)}</strong><span>{providerBalance.provider} · {providerBalance.environment} environment</span></div>}</section>
+    <section className="admin-section"><div className="section-title"><div><h2>Whish merchant balance</h2><p>Cash held by Whish for RentBrain. This is not commission and includes money owed to providers.</p></div><div className="inline-actions"><Select value={balanceCurrency} onChange={(event) => setBalanceCurrency(event.target.value as "USD" | "LBP")}><option value="USD">USD</option><option value="LBP">LBP</option></Select><Button variant="secondary" onClick={() => void loadProviderBalance()}>Refresh balance</Button></div></div>{providerBalance && <div className="alert alert-success"><strong>{formatMoney(providerBalance.balance, providerBalance.currency)}</strong><span>{providerBalance.provider} · {providerBalance.environment} environment · reconcile against provider earnings and Whish fees</span></div>}</section>
     <section className="admin-section"><h2>Expert payouts</h2><div className="alert"><strong>Payout ledger</strong><span>Whish Pay collects into RentBrain's merchant balance but does not expose provider transfers in this API. Pay the recorded net amount through the approved settlement process, then save its reference here.</span></div><div className="admin-table-wrap"><table className="admin-table">
       <thead><tr><th>Expert</th><th>Amount</th><th>Status</th><th>Update</th></tr></thead>
       <tbody>{payouts.map(({ payout, expert }) => <tr key={payout.id}><td><strong>{expert.firstName} {expert.lastName}</strong><small>{expert.phone || expert.email}</small></td><td>{formatMoney(payout.amount, payout.currency)}</td><td><StatusBadge value={payout.status} /></td><td>{payout.status === "paid" ? <small>{payout.providerReference}</small> : <Select value={payout.status} onChange={(event) => void updatePayout(payout, event.target.value as Parameters<typeof updatePayout>[1])}><option value="pending">Pending</option><option value="processing">Processing</option><option value="paid">Paid</option><option value="failed">Failed</option><option value="held">Held</option></Select>}</td></tr>)}</tbody>
     </table></div></section>
     <section className="admin-section"><h2>Payments</h2><div className="admin-table-wrap"><table className="admin-table">
-      <thead><tr><th>Reference</th><th>Provider</th><th>Amount</th><th>Refunded</th><th>Status</th></tr></thead>
-      <tbody>{payments?.map(({ payment }) => <tr key={payment.id}><td><small>{payment.id}</small></td><td>{payment.provider}</td><td>{formatMoney(payment.amount, payment.currency)}</td><td>{formatMoney(payment.refundedAmount, payment.currency)}</td><td><StatusBadge value={payment.status} /></td></tr>)}</tbody>
+      <thead><tr><th>Work</th><th>Reference</th><th>Client paid</th><th>Platform revenue</th><th>Provider net</th><th>Refunded</th><th>Status</th></tr></thead>
+      <tbody>{payments?.map(({ payment, booking, service, jobContract, job }) => { const source = booking ?? jobContract; return <tr key={payment.id}><td><strong>{job?.title ?? service?.title ?? "Service booking"}</strong><small>{jobContract ? "Job quotation" : "Scheduled service"}</small></td><td><small>{payment.id}</small><small>{payment.provider}</small></td><td>{formatMoney(payment.amount, payment.currency)}</td><td>{formatMoney(Number(source?.commissionAmount ?? 0) + Number(source?.clientFee ?? 0), payment.currency)}</td><td>{formatMoney(source?.expertEarnings, payment.currency)}</td><td>{formatMoney(payment.refundedAmount, payment.currency)}</td><td><StatusBadge value={payment.status} /></td></tr>})}</tbody>
     </table></div></section>
   </PanelState>;
+}
+
+function FinanceMetric({ label, value, note }: { label: string; value: string; note: string }) {
+  return <article><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
 }
 
 export function TaxonomyPanel() {
@@ -276,7 +307,7 @@ export function SettingsPanel() {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     try {
       await api("/admin/settings/commission", { method: "PUT", auth: true, body: { value: { expertPercentage: Number(data.get("expertPercentage")), clientFeePercentage: Number(data.get("clientFeePercentage")) }, description: "Current marketplace commission and client fee percentages", isPublic: true } });
-      setMessage("Commission configuration saved. Existing bookings were not changed."); await load();
+      setMessage("Commission configuration saved. Existing bookings and job contracts were not changed."); await load();
     } catch (caught) { setError(caught); }
   };
   const saveGeneric = async (event: FormEvent<HTMLFormElement>) => {
@@ -306,7 +337,7 @@ export function SettingsPanel() {
       })}</div>
     </section>
     <div className="admin-form-grid">
-      <form className="content-card form-stack" onSubmit={saveCommission}><h2>Marketplace commission</h2><Field label="Expert commission (%)"><Input name="expertPercentage" type="number" min="0" max="100" step="0.01" defaultValue={current?.expertPercentage ?? 0} required /></Field><Field label="Client fee (%)"><Input name="clientFeePercentage" type="number" min="0" max="100" step="0.01" defaultValue={current?.clientFeePercentage ?? 0} required /></Field><Button type="submit">Save rates</Button></form>
+      <form className="content-card form-stack" onSubmit={saveCommission}><h2>Marketplace commission</h2>{Number(current?.expertPercentage ?? 0) === 0 && Number(current?.clientFeePercentage ?? 0) === 0 && <div className="alert alert-error"><strong>RentBrain currently earns 0%</strong><span>With both rates at zero, provider processing fees are absorbed by the platform. Save the owner-approved rates before taking new payments.</span></div>}<Field label="Expert commission (%)"><Input name="expertPercentage" type="number" min="0" max="100" step="0.01" defaultValue={current?.expertPercentage ?? 0} required /></Field><Field label="Client fee (%)"><Input name="clientFeePercentage" type="number" min="0" max="100" step="0.01" defaultValue={current?.clientFeePercentage ?? 0} required /></Field><small>Expert commission is deducted from the quoted/service amount. Client fee is added on top. New transactions snapshot both rates.</small><Button type="submit">Save rates</Button></form>
       <form key={`${selectedKey}:${selectedSetting?.updatedAt || "new"}`} className="content-card form-stack" onSubmit={saveGeneric}><h2>Add or update setting</h2><Field label="Key" hint="Choose from the catalog; no key typing required."><Select name="key" value={selectedKey} onChange={(event) => { setSelectedKey(event.target.value); setMessage(""); }}>{editableRows.map((item) => <option key={item.key} value={item.key}>{item.key} — {item.label}</option>)}</Select></Field><Field label="Value" hint={`Expected format: ${selectedCatalog?.valueType || "text or JSON"}`}><Textarea name="value" rows={4} defaultValue={settingText(selectedSetting?.value ?? selectedCatalog?.example ?? "")} required /></Field><Field label="Description"><Input name="description" defaultValue={selectedSetting?.description || selectedCatalog?.description || ""} /></Field><label className="check-row"><input name="isPublic" type="checkbox" defaultChecked={selectedSetting?.isPublic ?? selectedCatalog?.defaultIsPublic ?? false} /><span>Expose through public settings API</span></label><Button type="submit">Save setting</Button></form>
     </div>
     <div className="section-title"><div><h2>Stored settings</h2><p>Current values saved in the database.</p></div></div>

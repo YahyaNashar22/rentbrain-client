@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -317,7 +317,7 @@ export function JobDetailPage() {
                 <Input
                   name="proposedAmount"
                   type="number"
-                  min="0"
+                  min="0.01"
                   step="0.01"
                   required
                 />
@@ -507,22 +507,31 @@ type OwnedApplication = {
   }
 }
 type MyApplication = { application: Application; job: Job }
+type JobPayment = {
+  payment: { id: string; amount: string; currency: string; status: string; checkoutUrl?: string | null }
+  job?: Job | null
+}
 
 export function ManageJobsPage() {
+  const navigate = useNavigate()
   const [posted, setPosted] = useState<Job[]>([])
   const [mine, setMine] = useState<MyApplication[]>([])
   const [selectedJob, setSelectedJob] = useState<string>()
   const [applications, setApplications] = useState<OwnedApplication[]>([])
+  const [jobPayments, setJobPayments] = useState<JobPayment[]>([])
   const [error, setError] = useState<unknown>()
   const [loading, setLoading] = useState(true)
+  const acceptanceKeys = useRef(new Map<string, string>())
   const load = () =>
     Promise.all([
       api<Job[]>("/jobs/mine/posted", { auth: true }),
       api<MyApplication[]>("/jobs/mine/applications", { auth: true }),
+      api<JobPayment[]>("/payments", { auth: true }),
     ])
-      .then(([jobs, applied]) => {
+      .then(([jobs, applied, paymentRows]) => {
         setPosted(jobs)
         setMine(applied)
+        setJobPayments(paymentRows.filter((row) => row.job))
         setLoading(false)
       })
       .catch((caught) => {
@@ -546,15 +555,40 @@ export function ManageJobsPage() {
   }
   const decide = async (
     jobId: string,
-    applicationId: string,
+    application: Application,
     decision: "accepted" | "rejected",
   ) => {
+    if (
+      decision === "accepted" &&
+      !window.confirm(
+        `Accept this ${formatMoney(application.proposedAmount, application.currency)} quotation and continue to secure payment? The job starts only after payment is confirmed.`,
+      )
+    ) return
     try {
-      await api(`/jobs/${jobId}/applications/${applicationId}`, {
+      const key = acceptanceKeys.current.get(application.id) ?? crypto.randomUUID()
+      acceptanceKeys.current.set(application.id, key)
+      const result = await api<{
+        payment?: { id: string; checkoutUrl?: string | null } | null
+      }>(`/jobs/${jobId}/applications/${application.id}`, {
         method: "PATCH",
         auth: true,
+        headers: { "Idempotency-Key": key },
         body: { decision },
       })
+      if (decision === "accepted" && result.payment) {
+        acceptanceKeys.current.delete(application.id)
+        if (result.payment.checkoutUrl) {
+          const checkoutUrl = new URL(result.payment.checkoutUrl, window.location.origin)
+          if (checkoutUrl.origin === window.location.origin) {
+            navigate(`${checkoutUrl.pathname}${checkoutUrl.search}`)
+          } else {
+            window.location.assign(checkoutUrl.toString())
+          }
+          return
+        }
+        navigate(`/checkout/${result.payment.id}`)
+        return
+      }
       await showApplications(jobId)
       await load()
     } catch (caught) {
@@ -617,7 +651,13 @@ export function ManageJobsPage() {
                   {job.status === "draft" && (
                     <Button onClick={() => void publish(job.id)}>Publish</Button>
                   )}
-                  {["open", "in_progress"].includes(job.status) && (
+                  {job.status === "pending_payment" && (() => {
+                    const payment = jobPayments.find((row) => row.job?.id === job.id)?.payment
+                    return payment?.checkoutUrl ? (
+                      <><StatusBadge value={payment.status} /><a className="btn btn-primary" href={payment.checkoutUrl}>Pay {formatMoney(payment.amount, payment.currency)}</a></>
+                    ) : <small>Preparing payment…</small>
+                  })()}
+                  {["open", "pending_payment", "in_progress"].includes(job.status) && (
                     <Button
                       variant="ghost"
                       onClick={() => void showApplications(job.id)}
@@ -631,6 +671,14 @@ export function ManageJobsPage() {
                       onClick={() => void status(job.id, "completed")}
                     >
                       Mark complete
+                    </Button>
+                  )}
+                  {["pending_payment", "in_progress"].includes(job.status) && (
+                    <Button
+                      variant="danger"
+                      onClick={() => void status(job.id, "cancelled")}
+                    >
+                      Cancel job
                     </Button>
                   )}
                   {job.status === "open" && (
@@ -688,7 +736,7 @@ export function ManageJobsPage() {
                         onClick={() =>
                           void decide(
                             application.jobId,
-                            application.id,
+                            application,
                             "accepted",
                           )
                         }
@@ -700,7 +748,7 @@ export function ManageJobsPage() {
                         onClick={() =>
                           void decide(
                             application.jobId,
-                            application.id,
+                            application,
                             "rejected",
                           )
                         }

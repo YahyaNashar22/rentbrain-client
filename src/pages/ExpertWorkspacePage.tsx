@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react"
 import {
   BadgeCheck,
+  Banknote,
   CalendarDays,
   FileCheck2,
   Plus,
@@ -19,10 +20,11 @@ import {
   Textarea,
   formatMoney,
 } from "../components/ui"
+import { EarningsDashboard } from "../components/EarningsDashboard"
 import { api, ApiError } from "../lib/api"
 import type { Category, Expert, Service, Specialization } from "../lib/types"
 
-type Tab = "profile" | "services" | "availability" | "verification"
+type Tab = "profile" | "services" | "availability" | "verification" | "earnings"
 
 export default function ExpertWorkspacePage() {
   const [profile, setProfile] = useState<Expert | null>(null)
@@ -85,6 +87,7 @@ export default function ExpertWorkspacePage() {
           { key: "verification", icon: ShieldCheck, label: "Verification" },
           { key: "services", icon: Plus, label: "Services" },
           { key: "availability", icon: CalendarDays, label: "Availability" },
+          { key: "earnings", icon: Banknote, label: "Earnings" },
         ] as const).map(({ key, icon: Icon, label }) => (
           <button
             className={tab === key ? "active" : ""}
@@ -135,6 +138,7 @@ export default function ExpertWorkspacePage() {
           onError={setError}
         />
       )}
+      {tab === "earnings" && <EarningsDashboard />}
     </>
   )
 }

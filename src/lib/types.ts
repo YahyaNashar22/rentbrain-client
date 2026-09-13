@@ -79,7 +79,7 @@ export type Job = {
   isRemote: boolean
   requiredSkills: string[]
   applicationDeadline?: string | null
-  status: "draft" | "open" | "in_progress" | "completed" | "cancelled" | "closed" | "moderated"
+  status: "draft" | "open" | "pending_payment" | "in_progress" | "completed" | "cancelled" | "closed" | "moderated"
   createdAt: string
 }
 
@@ -91,7 +91,7 @@ export type Application = {
   proposedAmount: string
   currency: string
   estimatedDurationDays: number
-  status: "pending" | "accepted" | "rejected" | "withdrawn"
+  status: "pending" | "payment_pending" | "accepted" | "rejected" | "withdrawn"
   createdAt: string
 }
 

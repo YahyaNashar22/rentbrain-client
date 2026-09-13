@@ -27,6 +27,7 @@ import {
   formatMoney,
 } from "../components/ui"
 import { useAuth } from "../context/AuthContext"
+import { EarningsDashboard } from "../components/EarningsDashboard"
 import { api, assetUrl } from "../lib/api"
 import type { Booking, Job, Notification } from "../lib/types"
 
@@ -314,7 +315,19 @@ type PaymentRecord = {
     failureReason?: string | null
     createdAt: string
   }
-  booking: Booking
+  booking?: Booking | null
+  service?: { id: number; title: string } | null
+  jobContract?: {
+    id: string
+    expertId: number
+    subtotal: string
+    commissionRate: string
+    commissionAmount: string
+    expertEarnings: string
+    currency: string
+    status: string
+  } | null
+  job?: Job | null
 }
 
 export function BookingsPage() {
@@ -394,12 +407,13 @@ export function BookingsPage() {
         description="Track upcoming sessions, outcomes, payments, and refunds."
       />
       <ErrorMessage error={error} />
+      <EarningsDashboard />
       {bookings.length ? (
         <div className="booking-list">
           {bookings.map((booking) => {
             const isExpert = booking.expertId === user?.id
             const payment = payments.find(
-              (item) => item.booking.id === booking.id,
+              (item) => item.booking?.id === booking.id,
             )?.payment
             return (
               <article key={booking.id}>
@@ -633,6 +647,7 @@ export function CheckoutPage() {
   const { paymentId } = useParams()
   const [searchParams] = useSearchParams()
   const [payment, setPayment] = useState<PaymentRecord["payment"]>()
+  const [isJobPayment, setIsJobPayment] = useState(false)
   const [error, setError] = useState<unknown>()
   useEffect(() => {
     let active = true
@@ -649,10 +664,11 @@ export function CheckoutPage() {
           })
         }
         const rows = await api<PaymentRecord[]>("/payments", { auth: true })
-        const found = rows.find((row) => row.payment.id === paymentId)?.payment
+        const found = rows.find((row) => row.payment.id === paymentId)
         if (!found) throw new Error("Payment not found")
         if (active) {
-          setPayment(found)
+          setPayment(found.payment)
+          setIsJobPayment(Boolean(found.jobContract))
           setError(undefined)
         }
       } catch (caught) {
@@ -676,7 +692,7 @@ export function CheckoutPage() {
   const pending = payment && ["pending", "processing"].includes(payment.status)
   return (
     <div className="container narrow section">
-      <PageHeader eyebrow="Checkout" title="Complete your booking payment" />
+      <PageHeader eyebrow="Checkout" title={isJobPayment ? "Secure your job payment" : "Complete your booking payment"} />
       <ErrorMessage error={error} />
       {!payment && !error ? (
         <Loading />
@@ -686,13 +702,13 @@ export function CheckoutPage() {
             <CreditCard />
             <StatusBadge value={payment.status} />
             <h2>{formatMoney(payment.amount, payment.currency)}</h2>
-            {payment.status === "succeeded" && <div className="alert alert-success"><strong>Payment confirmed</strong><span>Your Whish payment was verified and the booking is confirmed.</span></div>}
+            {payment.status === "succeeded" && <div className="alert alert-success"><strong>Payment confirmed</strong><span>{isJobPayment ? "Your Whish payment was verified and the selected quotation is now in progress." : "Your Whish payment was verified and the booking is confirmed."}</span></div>}
             {pending && <div className="alert"><strong>{redirectResult === "failure" ? "Payment attempt unsuccessful" : "Waiting for payment"}</strong><span>{redirectResult === "failure" ? "The Whish payment link remains open, so you can retry with the same link." : "RentBrain is checking the payment directly with Whish. Your booking is confirmed only after verification."}</span></div>}
             {payment.status === "failed" && <div className="alert alert-error"><strong>Payment link expired</strong><span>{payment.failureReason || "The payment was not completed."}</span></div>}
             {payment.status === "refunded" && <div className="alert"><strong>Payment refunded</strong><span>The full payment was returned through Whish.</span></div>}
             {pending && payment.checkoutUrl && <a className="btn btn-primary" href={payment.checkoutUrl}>Continue to Whish Pay</a>}
-            <Link className="btn btn-secondary" to="/bookings">
-              Return to bookings
+            <Link className="btn btn-secondary" to={isJobPayment ? "/jobs/manage" : "/bookings"}>
+              {isJobPayment ? "Return to jobs" : "Return to bookings"}
             </Link>
           </article>
         )
