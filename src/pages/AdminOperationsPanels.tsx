@@ -51,12 +51,20 @@ type Refund = {
   status: string;
   reason: string;
   adminNote?: string | null;
+  refundedAmount?: string | null;
+  providerRefundId?: string | null;
+};
+type RefundRow = {
+  refund: Refund;
+  payment: { id: string; amount: string; refundedAmount: string; currency: string; provider: string };
+  client: { id: number; firstName: string; lastName: string; email: string };
+  workTitle: string;
 };
 
 export function FinancePanel() {
   const [payments, setPayments] = useState<PaymentRow[]>();
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
-  const [refunds, setRefunds] = useState<Refund[]>([]);
+  const [refunds, setRefunds] = useState<RefundRow[]>([]);
   const [providerBalance, setProviderBalance] = useState<ProviderBalance>();
   const [overview, setOverview] = useState<FinanceOverview>();
   const [balanceCurrency, setBalanceCurrency] = useState<"USD" | "LBP">("USD");
@@ -64,7 +72,7 @@ export function FinancePanel() {
   const load = () => Promise.all([
     api<PaymentRow[]>("/admin/payments", { auth: true }),
     api<PayoutRow[]>("/admin/payouts", { auth: true }),
-    api<Refund[]>("/admin/refunds", { auth: true }),
+    api<RefundRow[]>("/admin/refunds", { auth: true }),
     api<FinanceOverview>("/admin/finance/overview", { auth: true }),
   ]).then(([paymentRows, payoutRows, refundRows, financeOverview]) => {
     setPayments(paymentRows); setPayouts(payoutRows); setRefunds(refundRows); setOverview(financeOverview);
@@ -92,11 +100,26 @@ export function FinancePanel() {
       await load();
     } catch (caught) { setError(caught); }
   };
-  const completeRefund = async (refund: Refund) => {
-    const providerReference = window.prompt("External refund reference:");
-    if (!providerReference) return;
+  const completeRefund = async ({ refund, payment }: RefundRow) => {
+    const amountInput = window.prompt(
+      `Amount actually refunded in ${payment.currency}:`,
+      refund.amount,
+    );
+    if (amountInput === null) return;
+    const refundedAmount = Number(amountInput);
+    if (!Number.isFinite(refundedAmount) || refundedAmount <= 0) {
+      setError(new Error("Enter a valid refunded amount greater than zero."));
+      return;
+    }
+    const externalReference = window.prompt("External refund transaction/reference:");
+    if (!externalReference?.trim()) return;
+    if (!window.confirm("Confirm that this refund was already completed externally? This updates the financial ledger and cannot be undone from the dashboard.")) return;
     try {
-      await api(`/admin/refunds/${refund.id}/complete`, { method: "PATCH", auth: true, body: { providerReference } });
+      await api(`/admin/refunds/${refund.id}/complete`, {
+        method: "PATCH",
+        auth: true,
+        body: { refundedAmount, externalReference: externalReference.trim() },
+      });
       await load();
     } catch (caught) { setError(caught); }
   };
@@ -118,14 +141,14 @@ export function FinancePanel() {
         return <div className="finance-chart-column" key={`${day.date}-${day.currency}`} title={`${day.date}: ${formatMoney(day.grossCollected, day.currency)}`}><div className="finance-chart-bar" style={{ height: `${height}%` }} /><small>{day.date.slice(5)}</small><span>{day.currency}</span></div>;
       })}
     </div></section> : null}
-    <section className="admin-section"><h2>Refund requests</h2>
-      {refunds.length ? <div className="compact-list">{refunds.map((refund) => <article key={refund.id}>
-        <div><StatusBadge value={refund.status} /><h3>{formatMoney(refund.amount)}</h3><p>{refund.reason}</p><small>Payment {refund.paymentId}</small></div>
+    <section className="admin-section"><div className="section-title"><div><h2>Refund requests</h2><p>Approve requests for external handling. After returning the money outside RentBrain, record the actual amount and external transaction reference here. No refund is sent through the Whish API.</p></div></div>
+      {refunds.length ? <div className="compact-list">{refunds.map((item) => { const { refund, payment, client, workTitle } = item; return <article key={refund.id}>
+        <div><StatusBadge value={refund.status} /><h3>{formatMoney(refund.amount, payment.currency)} requested</h3><strong>{workTitle}</strong><p>{refund.reason}</p><small>{client.firstName} {client.lastName} · {client.email}</small><small>Payment {payment.id} · {payment.provider}</small>{refund.refundedAmount && <small>Actually refunded: {formatMoney(refund.refundedAmount, payment.currency)} · Ref: {refund.providerRefundId}</small>}{refund.adminNote && <small>Admin note: {refund.adminNote}</small>}</div>
         <div className="inline-actions">
           {refund.status === "requested" && <><Button onClick={() => void decideRefund(refund, "approved")}>Approve</Button><Button variant="danger" onClick={() => void decideRefund(refund, "rejected")}>Reject</Button></>}
-          {refund.status === "processing" && (payments?.find(({ payment }) => payment.id === refund.paymentId)?.payment.provider === "manual" ? <Button variant="secondary" onClick={() => void completeRefund(refund)}>Record completion</Button> : <small>Whish reconciliation in progress</small>)}
+          {["approved", "processing"].includes(refund.status) && <Button variant="secondary" onClick={() => void completeRefund(item)}>Mark externally refunded</Button>}
         </div>
-      </article>)}</div> : <p className="muted">No refund requests.</p>}
+      </article>})}</div> : <p className="muted">No refund requests.</p>}
     </section>
     <section className="admin-section"><div className="section-title"><div><h2>Whish merchant balance</h2><p>Cash held by Whish for RentBrain. This is not commission and includes money owed to providers.</p></div><div className="inline-actions"><Select value={balanceCurrency} onChange={(event) => setBalanceCurrency(event.target.value as "USD" | "LBP")}><option value="USD">USD</option><option value="LBP">LBP</option></Select><Button variant="secondary" onClick={() => void loadProviderBalance()}>Refresh balance</Button></div></div>{providerBalance && <div className="alert alert-success"><strong>{formatMoney(providerBalance.balance, providerBalance.currency)}</strong><span>{providerBalance.provider} · {providerBalance.environment} environment · reconcile against provider earnings and Whish fees</span></div>}</section>
     <section className="admin-section"><h2>Expert payouts</h2><div className="alert"><strong>Payout ledger</strong><span>Whish Pay collects into RentBrain's merchant balance but does not expose provider transfers in this API. Pay the recorded net amount through the approved settlement process, then save its reference here.</span></div><div className="admin-table-wrap"><table className="admin-table">

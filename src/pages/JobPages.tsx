@@ -44,16 +44,21 @@ export function JobsPage() {
   const [error, setError] = useState<unknown>()
   const query = params.toString()
   useEffect(() => {
-    void Promise.all([
-      api<Paged<JobResult>>(`/jobs${query ? `?${query}` : ""}`),
-      api<Category[]>("/marketplace/categories"),
-    ])
-      .then(([jobs, taxonomy]) => {
-        setResult(jobs)
-        setCategories(taxonomy)
-        setError(undefined)
-      })
-      .catch(setError)
+    const load = () => {
+      void Promise.all([
+        api<Paged<JobResult>>(`/jobs${query ? `?${query}` : ""}`),
+        api<Category[]>("/marketplace/categories"),
+      ])
+        .then(([jobs, taxonomy]) => {
+          setResult(jobs)
+          setCategories(taxonomy)
+          setError(undefined)
+        })
+        .catch(setError)
+    }
+    load()
+    window.addEventListener("focus", load)
+    return () => window.removeEventListener("focus", load)
   }, [query])
   const filter = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -597,7 +602,7 @@ export function ManageJobsPage() {
   }
   const status = async (
     jobId: string,
-    value: "completed" | "cancelled" | "closed",
+    value: "completed" | "closed",
   ) => {
     try {
       await api(`/jobs/${jobId}/status`, {
@@ -671,14 +676,6 @@ export function ManageJobsPage() {
                       onClick={() => void status(job.id, "completed")}
                     >
                       Mark complete
-                    </Button>
-                  )}
-                  {["pending_payment", "in_progress"].includes(job.status) && (
-                    <Button
-                      variant="danger"
-                      onClick={() => void status(job.id, "cancelled")}
-                    >
-                      Cancel job
                     </Button>
                   )}
                   {job.status === "open" && (

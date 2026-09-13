@@ -794,7 +794,7 @@ export function CheckoutPage() {
             {payment.status === "succeeded" && <div className="alert alert-success"><strong>Payment confirmed</strong><span>{isJobPayment ? "Your Whish payment was verified and the selected quotation is now in progress." : "Your Whish payment was verified and the booking is confirmed."}</span></div>}
             {pending && <div className="alert"><strong>{redirectResult === "failure" ? "Payment attempt unsuccessful" : "Waiting for payment"}</strong><span>{redirectResult === "failure" ? "The Whish payment link remains open, so you can retry with the same link." : "RentBrain is checking the payment directly with Whish. Your booking is confirmed only after verification."}</span></div>}
             {payment.status === "failed" && <div className="alert alert-error"><strong>Payment link expired</strong><span>{payment.failureReason || "The payment was not completed."}</span></div>}
-            {payment.status === "refunded" && <div className="alert"><strong>Payment refunded</strong><span>The full payment was returned through Whish.</span></div>}
+            {payment.status === "refunded" && <div className="alert"><strong>Payment refunded</strong><span>The refund was completed externally and recorded by RentBrain administration.</span></div>}
             {pending && payment.checkoutUrl && <a className="btn btn-primary" href={payment.checkoutUrl}>Continue to Whish Pay</a>}
             <Link className="btn btn-secondary" to={isJobPayment ? "/jobs/manage" : "/bookings"}>
               {isJobPayment ? "Return to jobs" : "Return to bookings"}
