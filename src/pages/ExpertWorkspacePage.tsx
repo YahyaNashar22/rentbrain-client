@@ -70,7 +70,7 @@ export default function ExpertWorkspacePage() {
         title={
           profile ? "Build your expert practice" : "Become a RentBrain expert"
         }
-        description="Create your profile, verify your credentials, define services, and choose when clients can book."
+        description="Create and publish your profile, define services, and choose when clients can book. Credential verification is optional."
         actions={
           profile && (
             <StatusBadge
@@ -299,23 +299,15 @@ function ProfileForm({
           Specializations are managed centrally by RentBrain administrators.
         </small>
       </div>
-      {profile?.verificationStatus === "verified" ? (
-        <label className="check-row">
-          <input
-            name="isPublished"
-            type="checkbox"
-            defaultChecked={profile.isPublished}
-          />
-          <span>Publish my profile in expert search</span>
-        </label>
-      ) : (
-        <div className="alert">
-          <ShieldCheck size={18} />
-          <span>
-            Your profile can be published after administrator verification.
-          </span>
-        </div>
-      )}
+      <label className="check-row">
+        <input
+          name="isPublished"
+          type="checkbox"
+          defaultChecked={profile?.isPublished ?? true}
+        />
+        <span>Show my profile in Find an expert</span>
+      </label>
+      <small>You can publish immediately. Credential verification is optional and does not control profile visibility.</small>
       <Button busy={busy} type="submit">
         Save expert profile
       </Button>
@@ -381,7 +373,9 @@ function VerificationPanel({
         <h2>Expert verification</h2>
         <p>
           Upload evidence relevant to the services you plan to offer. Files are
-          private and accessible only to you and administrators.
+          private and accessible only to you and administrators. Verification is
+          optional and is not required to publish your profile, services, or apply
+          for jobs.
         </p>
         {profile.verificationStatus === "verified" && (
           <div className="alert alert-success">
@@ -396,6 +390,7 @@ function VerificationPanel({
             <option value="identity_document">Identity document</option>
             <option value="degree_or_certificate">Degree or certificate</option>
             <option value="portfolio_evidence">Portfolio evidence</option>
+            <option value="resume">Resume</option>
           </Select>
         </Field>
         <Field label="Choose file" hint="PDF, JPEG, or PNG. Maximum 10 MB.">
@@ -456,10 +451,7 @@ function ServicesPanel({
           price: Number(data.get("price")),
           currency: "USD",
           deliveryMode: String(data.get("deliveryMode")),
-          status:
-            profile.verificationStatus === "verified"
-              ? String(data.get("status"))
-              : "draft",
+          status: String(data.get("status")),
         },
       })
       setShowForm(false)
@@ -566,14 +558,12 @@ function ServicesPanel({
               </Select>
             </Field>
           </div>
-          {profile.verificationStatus === "verified" && (
-            <Field label="Listing status">
-              <Select name="status">
-                <option value="published">Publish now</option>
-                <option value="draft">Save draft</option>
-              </Select>
-            </Field>
-          )}
+          <Field label="Listing status">
+            <Select name="status">
+              <option value="published">Publish now</option>
+              <option value="draft">Save draft</option>
+            </Select>
+          </Field>
           <Button busy={busy} type="submit">
             Create service
           </Button>
@@ -591,8 +581,7 @@ function ServicesPanel({
               <div className="service-price">
                 <strong>{formatMoney(service.price, service.currency)}</strong>
                 <small>{service.durationMinutes} min</small>
-                {profile.verificationStatus === "verified" &&
-                  service.status !== "archived" && (
+                {service.status !== "archived" && (
                     <Button
                       variant="secondary"
                       onClick={() => void togglePublication(service)}

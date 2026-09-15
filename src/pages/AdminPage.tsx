@@ -3,6 +3,7 @@ import {
   Banknote,
   BriefcaseBusiness,
   FileText,
+  FileSpreadsheet,
   Gauge,
   ListChecks,
   Settings,
@@ -23,6 +24,7 @@ import {
   formatMoney,
 } from "../components/ui";
 import { api, downloadApiFile } from "../lib/api";
+import { exportDate, exportExcel } from "../lib/exportExcel";
 import type { Job, Paged, User } from "../lib/types";
 import {
   AuditPanel,
@@ -116,7 +118,7 @@ function OverviewPanel() {
       <div className="admin-metrics">
         {data && <>
           <Metric label="Registered users" value={data.users.total} note={`${data.users.active} active`} />
-          <Metric label="Verified experts" value={data.experts.verified} note={`${data.experts.total} profiles`} />
+          <Metric label="Expert profiles" value={data.experts.total} note={`${data.experts.verified} optionally verified`} />
           <Metric label="Open jobs" value={data.jobs.open} note={`${data.jobs.applications} applications`} />
           <Metric label="Completed bookings" value={data.bookings.completed} note={`${data.bookings.total} total`} />
           <Metric label="Successful payments" value={data.payments.successfulPayments} note="See Finance for totals by currency" />
@@ -135,6 +137,7 @@ function UsersPanel() {
   const [data, setData] = useState<Paged<User>>();
   const [error, setError] = useState<unknown>();
   const [search, setSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
   const load = () => api<Paged<User>>(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`, { auth: true }).then(setData).catch(setError);
   useEffect(() => { void load(); }, []);
   const updateStatus = async (user: User, status: "active" | "suspended" | "closed") => {
@@ -145,11 +148,41 @@ function UsersPanel() {
       await load();
     } catch (caught) { setError(caught); }
   };
+  const exportUsers = async () => {
+    setExporting(true); setError(undefined);
+    try {
+      const allUsers: User[] = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const query = new URLSearchParams({ page: String(page), limit: "100" });
+        if (search.trim()) query.set("search", search.trim());
+        const response = await api<Paged<User>>(`/admin/users?${query}`, { auth: true });
+        allUsers.push(...response.items); total = response.pagination.total; page += 1;
+      } while (allUsers.length < total);
+      await exportExcel(`rentbrain-users-${new Date().toISOString().slice(0, 10)}.xlsx`, "Users", allUsers.map((user) => ({
+        "User ID": user.id,
+        "First name": user.firstName,
+        "Last name": user.lastName,
+        Email: user.email,
+        Phone: user.phone || "",
+        Role: user.role,
+        Status: user.status,
+        Country: user.country || "",
+        City: user.city || "",
+        "Email verified": exportDate(user.emailVerifiedAt),
+        "Registered at": exportDate(user.createdAt),
+        "Marketing opt-in": user.marketingOptIn,
+      })));
+    } catch (caught) { setError(caught); }
+    finally { setExporting(false); }
+  };
   return (
     <PanelState loading={!data && !error} error={error}>
       <form className="inline-search" onSubmit={(event) => { event.preventDefault(); void load(); }}>
         <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or email" />
         <Button type="submit">Search</Button>
+        <Button busy={exporting} type="button" variant="secondary" onClick={() => void exportUsers()}><FileSpreadsheet size={17} /> Export Excel</Button>
       </form>
       {data?.items.length ? <div className="admin-table-wrap"><table className="admin-table">
         <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Verified</th><th>Action</th></tr></thead>
@@ -164,8 +197,8 @@ function UsersPanel() {
 }
 
 type ExpertRow = {
-  profile: { userId: number; professionalTitle: string; verificationStatus: string; isPublished: boolean };
-  user: { id: number; firstName: string; lastName: string; email: string };
+  profile: { userId: number; professionalTitle: string; biography?: string; yearsExperience?: number; languages?: string[]; verificationStatus: string; isPublished: boolean; averageRating?: string; reviewCount?: number; createdAt?: string };
+  user: { id: number; firstName: string; lastName: string; email: string; phone?: string | null; country?: string | null; city?: string | null; status?: string; createdAt?: string };
 };
 type Verification = {
   profile: ExpertRow["profile"] & { verificationNote?: string | null };
@@ -181,6 +214,7 @@ function ExpertsPanel() {
   const [rows, setRows] = useState<ExpertRow[]>();
   const [selected, setSelected] = useState<Verification>();
   const [error, setError] = useState<unknown>();
+  const [exporting, setExporting] = useState(false);
   const load = () => api<ExpertRow[]>("/admin/experts", { auth: true }).then(setRows).catch(setError);
   useEffect(() => { void load(); }, []);
   const inspect = async (id: number) => {
@@ -205,15 +239,43 @@ function ExpertsPanel() {
       setSelected(undefined); await load();
     } catch (caught) { setError(caught); }
   };
-  return <PanelState loading={!rows && !error} error={error}><div className="admin-split">
+  const exportExperts = async () => {
+    if (!rows) return;
+    setExporting(true); setError(undefined);
+    try {
+      await exportExcel(`rentbrain-experts-${new Date().toISOString().slice(0, 10)}.xlsx`, "Experts", rows.map(({ profile, user }) => ({
+        "Expert ID": user.id,
+        "First name": user.firstName,
+        "Last name": user.lastName,
+        Email: user.email,
+        Phone: user.phone || "",
+        "Professional title": profile.professionalTitle,
+        Biography: profile.biography || "",
+        "Years experience": profile.yearsExperience ?? 0,
+        Languages: profile.languages?.join(", ") || "",
+        Country: user.country || "",
+        City: user.city || "",
+        "Account status": user.status || "",
+        "Profile visible": profile.isPublished,
+        "Credential status": profile.verificationStatus,
+        Rating: Number(profile.averageRating || 0),
+        Reviews: profile.reviewCount ?? 0,
+        "Registered at": exportDate(user.createdAt),
+      })));
+    } catch (caught) { setError(caught); }
+    finally { setExporting(false); }
+  };
+  return <PanelState loading={!rows && !error} error={error}>
+    <div className="section-title"><div><h2>Experts</h2><p>Profiles are public without approval. Credential review remains optional.</p></div><Button busy={exporting} variant="secondary" onClick={() => void exportExperts()}><FileSpreadsheet size={17} /> Export Excel</Button></div>
+    <div className="admin-split">
     <div className="compact-list">{rows?.map(({ profile, user }) => <article key={user.id}><div>
       <StatusBadge value={profile.verificationStatus} /><h3>{user.firstName} {user.lastName}</h3><p>{profile.professionalTitle}</p><small>{user.email}</small>
-    </div><Button variant="ghost" onClick={() => void inspect(user.id)}>Review</Button></article>)}</div>
-    {selected && <aside className="admin-inspector"><div className="section-title"><h2>Verification review</h2><button className="text-button" onClick={() => setSelected(undefined)}>Close</button></div>
+    </div><Button variant="ghost" onClick={() => void inspect(user.id)}>Credentials</Button></article>)}</div>
+    {selected && <aside className="admin-inspector"><div className="section-title"><h2>Credential review</h2><button className="text-button" onClick={() => setSelected(undefined)}>Close</button></div>
       <StatusBadge value={selected.profile.verificationStatus} /><h3>{selected.profile.professionalTitle}</h3>
       {selected.documents.map((document) => <div className="document-row" key={document.id}><div><strong>{document.type.replace(/_/g, " ")}</strong><small>{formatDate(document.createdAt)} · {document.status}</small></div><Button variant="ghost" onClick={() => void downloadApiFile(document.fileUrl, `expert-document-${document.id}`)}>Download</Button></div>)}
       {!selected.documents.length && <p>No documents submitted.</p>}
-      <div className="inline-actions"><Button onClick={() => void decide("verified")}>Approve expert</Button><Button variant="danger" onClick={() => void decide("rejected")}>Reject</Button></div>
+      <div className="inline-actions"><Button onClick={() => void decide("verified")}>Mark credentials verified</Button><Button variant="danger" onClick={() => void decide("rejected")}>Reject credentials</Button></div>
     </aside>}
   </div></PanelState>;
 }
@@ -239,6 +301,7 @@ type AdminJobRow = {
 function JobsPanel() {
   const [jobs, setJobs] = useState<AdminJobRow[]>();
   const [error, setError] = useState<unknown>();
+  const [exporting, setExporting] = useState(false);
   const load = () => api<AdminJobRow[]>("/admin/jobs", { auth: true }).then(setJobs).catch(setError);
   useEffect(() => { void load(); }, []);
   const moderate = async (job: Job, status: "open" | "completed" | "cancelled" | "closed" | "moderated") => {
@@ -247,7 +310,40 @@ function JobsPanel() {
     try { await api(`/admin/jobs/${job.id}/status`, { method: "PATCH", auth: true, body: { status, reason } }); await load(); }
     catch (caught) { setError(caught); }
   };
-  return <PanelState loading={!jobs && !error} error={error}><div className="admin-table-wrap"><table className="admin-table">
+  const exportJobs = async () => {
+    if (!jobs) return;
+    setExporting(true); setError(undefined);
+    try {
+      await exportExcel(`rentbrain-jobs-${new Date().toISOString().slice(0, 10)}.xlsx`, "Jobs", jobs.map(({ job, owner, expert, contract, payment, payout }) => ({
+        "Job ID": job.id,
+        Title: job.title,
+        Status: job.status,
+        "Owner name": `${owner.firstName} ${owner.lastName}`,
+        "Owner email": owner.email,
+        "Owner phone": owner.phone || "",
+        "Expert name": expert ? `${expert.firstName} ${expert.lastName}` : "",
+        "Expert email": expert?.email || "",
+        "Expert phone": expert?.phone || "",
+        "Budget minimum": Number(job.budgetMin || 0),
+        "Budget maximum": Number(job.budgetMax || 0),
+        Currency: job.currency,
+        "Contract status": contract?.status || "",
+        "Accepted quote": Number(contract?.subtotal || 0),
+        "Client total": Number(contract?.total || 0),
+        "Commission": Number(contract?.commissionAmount || 0),
+        "Expert net": Number(contract?.expertEarnings || 0),
+        "Payment status": payment?.status || "",
+        "Payout status": payout?.status || "",
+        "Payout reference": payout?.providerReference || "",
+        "Created at": exportDate(job.createdAt),
+        "Completed at": exportDate(contract?.completedAt),
+      })));
+    } catch (caught) { setError(caught); }
+    finally { setExporting(false); }
+  };
+  return <PanelState loading={!jobs && !error} error={error}>
+    <div className="section-title"><div><h2>Jobs</h2><p>Ownership, assignment, payment, and settlement records.</p></div><Button busy={exporting} variant="secondary" onClick={() => void exportJobs()}><FileSpreadsheet size={17} /> Export Excel</Button></div>
+    <div className="admin-table-wrap"><table className="admin-table">
     <thead><tr><th>Job</th><th>Client / owner</th><th>Assigned expert</th><th>Contract & payment</th><th>Expert settlement</th><th>Status</th><th>Created</th><th>Moderation</th></tr></thead>
     <tbody>{jobs?.map(({ job, owner, expert, contract, payment, payout }) => <tr key={job.id}>
       <td><strong>{job.title}</strong><small>{job.id}</small><small>Budget {formatMoney(job.budgetMax || job.budgetMin, job.currency)}</small></td>

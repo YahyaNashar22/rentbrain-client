@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { FileSpreadsheet } from "lucide-react";
 import {
   Button,
   ErrorMessage,
@@ -12,6 +13,7 @@ import {
   formatMoney,
 } from "../components/ui";
 import { api } from "../lib/api";
+import { exportDate, exportExcel } from "../lib/exportExcel";
 import type { Category, Paged, Specialization } from "../lib/types";
 
 function PanelState({ loading, error, children }: { loading: boolean; error: unknown; children: ReactNode }) {
@@ -44,6 +46,8 @@ type Payout = {
   currency: string;
   status: string;
   providerReference?: string | null;
+  paidAt?: string | null;
+  createdAt?: string;
 };
 type PayoutRow = {
   payout: Payout;
@@ -78,6 +82,7 @@ export function FinancePanel() {
   const [refunds, setRefunds] = useState<RefundRow[]>([]);
   const [providerBalance, setProviderBalance] = useState<ProviderBalance>();
   const [overview, setOverview] = useState<FinanceOverview>();
+  const [exporting, setExporting] = useState<"payments" | "payouts" | null>(null);
   const [balanceCurrency, setBalanceCurrency] = useState<"USD" | "LBP">("USD");
   const [error, setError] = useState<unknown>();
   const load = () => Promise.all([
@@ -134,6 +139,61 @@ export function FinancePanel() {
       await load();
     } catch (caught) { setError(caught); }
   };
+  const exportPayments = async () => {
+    if (!payments) return;
+    setExporting("payments"); setError(undefined);
+    try {
+      await exportExcel(`rentbrain-payments-${new Date().toISOString().slice(0, 10)}.xlsx`, "Payments", payments.map(({ payment, booking, service, jobContract, job, client, expert }) => {
+        const source = booking ?? jobContract;
+        return {
+          "Payment ID": payment.id,
+          Type: jobContract ? "Job" : "Session",
+          Work: job?.title ?? service?.title ?? "Service booking",
+          "Client name": client ? `${client.firstName} ${client.lastName}` : "",
+          "Client email": client?.email || "",
+          "Client phone": client?.phone || "",
+          "Expert name": expert ? `${expert.firstName} ${expert.lastName}` : "",
+          "Expert email": expert?.email || "",
+          "Expert phone": expert?.phone || "",
+          Provider: payment.provider,
+          Currency: payment.currency,
+          "Client paid": Number(payment.amount),
+          Commission: Number(source?.commissionAmount || 0),
+          "Client fee": Number(source?.clientFee || 0),
+          "Platform revenue": Number(source?.commissionAmount || 0) + Number(source?.clientFee || 0),
+          "Expert net": Number(source?.expertEarnings || 0),
+          Refunded: Number(payment.refundedAmount),
+          Status: payment.status,
+          "Paid at": exportDate(payment.paidAt),
+        };
+      }));
+    } catch (caught) { setError(caught); }
+    finally { setExporting(null); }
+  };
+  const exportPayouts = async () => {
+    setExporting("payouts"); setError(undefined);
+    try {
+      await exportExcel(`rentbrain-payouts-${new Date().toISOString().slice(0, 10)}.xlsx`, "Payouts", payouts.map(({ payout, expert, client, booking, service, jobContract, job, payment }) => ({
+        "Payout ID": payout.id,
+        Type: jobContract ? "Job" : "Session",
+        Work: job?.title ?? service?.title ?? "Service session",
+        "Client name": client ? `${client.firstName} ${client.lastName}` : "",
+        "Client email": client?.email || "",
+        "Expert name": `${expert.firstName} ${expert.lastName}`,
+        "Expert email": expert.email,
+        "Expert phone / possible Whish": expert.phone || "",
+        "Payment ID": payment?.id || "",
+        "Net payout": Number(payout.amount),
+        Currency: payout.currency,
+        Status: payout.status,
+        "Settlement reference": payout.providerReference || "",
+        "Work completed at": exportDate(booking?.completedAt ?? jobContract?.completedAt),
+        "Paid at": exportDate(payout.paidAt),
+        "Payout created at": exportDate(payout.createdAt),
+      })));
+    } catch (caught) { setError(caught); }
+    finally { setExporting(null); }
+  };
 
   return <PanelState loading={!payments && !error} error={error}>
     {overview?.byCurrency.map((summary) => <section className="admin-section" key={summary.currency}>
@@ -162,7 +222,7 @@ export function FinancePanel() {
       </article>})}</div> : <p className="muted">No refund requests.</p>}
     </section>
     <section className="admin-section"><div className="section-title"><div><h2>Whish merchant balance</h2><p>Cash held by Whish for RentBrain. This is not commission and includes money owed to providers.</p></div><div className="inline-actions"><Select value={balanceCurrency} onChange={(event) => setBalanceCurrency(event.target.value as "USD" | "LBP")}><option value="USD">USD</option><option value="LBP">LBP</option></Select><Button variant="secondary" onClick={() => void loadProviderBalance()}>Refresh balance</Button></div></div>{providerBalance && <div className="alert alert-success"><strong>{formatMoney(providerBalance.balance, providerBalance.currency)}</strong><span>{providerBalance.provider} · {providerBalance.environment} environment · reconcile against provider earnings and Whish fees</span></div>}</section>
-    <section className="admin-section"><h2>Expert payouts</h2><div className="alert"><strong>Ready-to-settle work</strong><span>A payout appears only after the job or session is completed. Transfer the exact expert net amount externally, verify the expert's destination directly (their profile phone is not guaranteed to be a Whish wallet), then mark it paid and save the transaction reference.</span></div><div className="admin-table-wrap"><table className="admin-table">
+    <section className="admin-section"><div className="section-title"><h2>Expert payouts</h2><Button busy={exporting === "payouts"} variant="secondary" onClick={() => void exportPayouts()}><FileSpreadsheet size={17} /> Export Excel</Button></div><div className="alert"><strong>Ready-to-settle work</strong><span>A payout appears only after the job or session is completed. Transfer the exact expert net amount externally, verify the expert's destination directly (their profile phone is not guaranteed to be a Whish wallet), then mark it paid and save the transaction reference.</span></div><div className="admin-table-wrap"><table className="admin-table">
       <thead><tr><th>Work</th><th>Client / owner</th><th>Expert to pay</th><th>Net payout</th><th>Completed</th><th>Status</th><th>Settlement</th></tr></thead>
       <tbody>{payouts.map(({ payout, expert, client, booking, service, jobContract, job, payment }) => {
         const completedAt = booking?.completedAt ?? jobContract?.completedAt;
@@ -177,7 +237,7 @@ export function FinancePanel() {
         </tr>;
       })}</tbody>
     </table></div></section>
-    <section className="admin-section"><h2>Payments</h2><div className="admin-table-wrap"><table className="admin-table">
+    <section className="admin-section"><div className="section-title"><h2>Payments</h2><Button busy={exporting === "payments"} variant="secondary" onClick={() => void exportPayments()}><FileSpreadsheet size={17} /> Export Excel</Button></div><div className="admin-table-wrap"><table className="admin-table">
       <thead><tr><th>Work</th><th>Client / owner</th><th>Assigned expert</th><th>Reference</th><th>Client paid</th><th>Platform revenue</th><th>Expert net</th><th>Refunded</th><th>Status</th></tr></thead>
       <tbody>{payments?.map(({ payment, booking, service, jobContract, job, client, expert }) => { const source = booking ?? jobContract; return <tr key={payment.id}>
         <td><strong>{job?.title ?? service?.title ?? "Service booking"}</strong><small>{jobContract ? "Job quotation" : "Scheduled service"}</small></td>

@@ -339,7 +339,7 @@ export function JobDetailPage() {
               <Button busy={busy} type="submit">
                 Submit application
               </Button>
-              <small>A verified expert profile is required to apply.</small>
+              <small>An expert profile is required to apply. Credential verification is optional.</small>
             </form>
           )}
         </aside>

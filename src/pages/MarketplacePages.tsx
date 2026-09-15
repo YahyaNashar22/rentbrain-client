@@ -75,7 +75,7 @@ export function ExpertsPage() {
       <PageHeader
         eyebrow="Expert marketplace"
         title="Find the right mind for the moment."
-        description="Search verified expert profiles and book a focused service."
+        description="Search public expert profiles, compare credentials and ratings, and book a focused service."
       />
       <form className="search-panel" onSubmit={submit}>
         <Field label="What do you need?">
@@ -151,9 +151,9 @@ function ExpertCard({ expert }: { expert: Expert }) {
     <article className="expert-card">
       <div className="expert-top">
         <Avatar src={assetUrl(expert.avatarUrl)} name={name} size="large" />
-        <span className="verified-chip">
-          <BadgeCheck size={16} /> Verified
-        </span>
+        {expert.verificationStatus === "verified" && <span className="verified-chip">
+          <BadgeCheck size={16} /> Credentials verified
+        </span>}
       </div>
       <h2>{name}</h2>
       <p className="expert-title">{expert.professionalTitle}</p>
@@ -367,9 +367,9 @@ export function ExpertDetailPage() {
       <div className="profile-hero">
         <Avatar src={assetUrl(expert.avatarUrl)} name={name} size="large" />
         <div>
-          <div className="verified-chip">
-            <BadgeCheck size={16} /> Verified expert
-          </div>
+          {expert.verificationStatus === "verified" && <div className="verified-chip">
+            <BadgeCheck size={16} /> Credentials verified
+          </div>}
           <h1>{name}</h1>
           <h2>{expert.professionalTitle}</h2>
           <div className="profile-facts">

@@ -13,6 +13,8 @@ export type User = {
   avatarUrl?: string | null
   emailVerifiedAt: string
   marketingOptIn: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 export type Category = {

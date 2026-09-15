@@ -585,7 +585,7 @@ export function BookingsPage() {
       ) : (
         <EmptyState
           title="No bookings yet"
-          body="Find a verified expert and request a time that works."
+          body="Find an expert and request a time that works."
           action={
             <Link className="btn btn-primary" to="/experts">
               Find an expert

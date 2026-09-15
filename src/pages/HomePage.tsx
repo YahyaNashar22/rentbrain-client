@@ -44,13 +44,16 @@ export default function HomePage() {
               <Link className={buttonClass()} to="/experts">
                 Find an expert <ArrowRight size={19} />
               </Link>
+              <Link className={buttonClass("ghost")} to="/expert/setup">
+                Become an expert
+              </Link>
               <Link className={buttonClass("secondary")} to="/jobs/new">
                 Post what you need
               </Link>
             </div>
             <div className="hero-notes">
               <span>
-                <BadgeCheck size={18} /> Verified expert profiles
+                <BadgeCheck size={18} /> Expert profiles & optional credentials
               </span>
               <span>
                 <ShieldCheck size={18} /> Role-based platform security
@@ -130,7 +133,7 @@ export default function HomePage() {
               <div className="path-number">01</div>
               <h3>Browse expert services</h3>
               <p>
-                Search verified profiles, choose a published service, and
+                Search expert profiles, compare optional credentials, choose a published service, and
                 request an available time.
               </p>
               <Link to="/experts">
@@ -142,7 +145,7 @@ export default function HomePage() {
               <div className="path-number">02</div>
               <h3>Post a job or request</h3>
               <p>
-                Share your brief and budget. Verified experts can apply, and you
+                Share your brief and budget. Experts can apply, and you
                 decide who to work with.
               </p>
               <Link to="/jobs/new">
