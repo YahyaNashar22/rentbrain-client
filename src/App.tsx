@@ -28,6 +28,7 @@ import {
 } from "./pages/AccountPages"
 import ExpertWorkspacePage from "./pages/ExpertWorkspacePage"
 import AdminPage from "./pages/AdminPage"
+import FaqPage from "./pages/FaqPage"
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="jobs/:id" element={<JobDetailPage />} />
             <Route path="legal/:type" element={<LegalPage />} />
             <Route path="contact" element={<ContactPage />} />
+            <Route path="faq" element={<FaqPage />} />
 
             <Route element={<ProtectedRoute />}>
               <Route path="jobs/new" element={<NewJobPage />} />

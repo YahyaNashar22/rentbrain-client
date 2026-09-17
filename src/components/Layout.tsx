@@ -3,6 +3,7 @@ import {
   Bell,
   BriefcaseBusiness,
   CalendarDays,
+  CircleHelp,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -31,6 +32,7 @@ export function Brand({ inverse = false }: { inverse?: boolean }) {
 const mainLinks = [
   { to: "/experts", label: "Find experts", icon: Search },
   { to: "/jobs", label: "Browse jobs", icon: BriefcaseBusiness },
+  { to: "/faq", label: "FAQ", icon: CircleHelp },
 ]
 
 export function Layout() {
@@ -141,6 +143,7 @@ export function Layout() {
             <h2>Account</h2>
             <Link to="/expert/setup">Become an expert</Link>
             <Link to="/dashboard">My hub</Link>
+            <Link to="/faq">FAQ</Link>
             <Link to="/contact">Support</Link>
           </div>
           <div>
