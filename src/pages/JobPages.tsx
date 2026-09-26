@@ -43,6 +43,9 @@ export function JobsPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [error, setError] = useState<unknown>()
   const query = params.toString()
+  // The API is the primary visibility boundary. Keep this defensive filter so
+  // a stale intermediary response can never render a cancelled/closed job.
+  const openJobs = result?.items.filter(({ job }) => job.status === "open") ?? []
   useEffect(() => {
     const load = () => {
       void Promise.all([
@@ -119,9 +122,9 @@ export function JobsPage() {
       <ErrorMessage error={error} />
       {!result && !error ? (
         <Loading label="Loading opportunities" />
-      ) : result?.items.length ? (
+      ) : openJobs.length ? (
         <div className="jobs-list">
-          {result.items.map(({ job, client }) => (
+          {openJobs.map(({ job, client }) => (
             <JobCard job={job} client={client} key={job.id} />
           ))}
         </div>

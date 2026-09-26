@@ -1,11 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react"
 import {
-  BadgeCheck,
+  ArrowRight,
   Banknote,
   CalendarDays,
   FileCheck2,
   Plus,
-  ShieldCheck,
   Store,
 } from "lucide-react"
 import {
@@ -18,13 +17,14 @@ import {
   Select,
   StatusBadge,
   Textarea,
+  formatDate,
   formatMoney,
 } from "../components/ui"
 import { EarningsDashboard } from "../components/EarningsDashboard"
-import { api, ApiError } from "../lib/api"
-import type { Category, Expert, Service, Specialization } from "../lib/types"
+import { api, ApiError, downloadApiFile } from "../lib/api"
+import type { Category, Expert, ExpertDocument, Service, Specialization } from "../lib/types"
 
-type Tab = "profile" | "services" | "availability" | "verification" | "earnings"
+type Tab = "profile" | "services" | "availability" | "documents" | "earnings"
 
 export default function ExpertWorkspacePage() {
   const [profile, setProfile] = useState<Expert | null>(null)
@@ -70,31 +70,47 @@ export default function ExpertWorkspacePage() {
         title={
           profile ? "Build your expert practice" : "Become a RentBrain expert"
         }
-        description="Create and publish your profile, define services, and choose when clients can book. Credential verification is optional."
-        actions={
-          profile && (
-            <StatusBadge
-              value={profile.verificationStatus || "not_submitted"}
-            />
-          )
-        }
+        description="Follow the guided steps to create your expert presence, add verification documents, publish services, and set availability."
       />
       <ErrorMessage error={error} />
       {message && <div className="alert alert-success">{message}</div>}
-      <nav className="tab-nav" aria-label="Expert settings">
+      {!profile && (
+        <div className="expert-next-step">
+          <span className="expert-next-number">01</span>
+          <div>
+            <small>Start here</small>
+            <h2>Create your expert profile</h2>
+            <p>Save your professional details first. We will then take you directly to verification documents.</p>
+          </div>
+          <ArrowRight aria-hidden />
+        </div>
+      )}
+      {profile && !profile.documents?.length && tab !== "documents" && (
+        <button className="expert-next-step expert-next-button" type="button" onClick={() => setTab("documents")}>
+          <span className="expert-next-number">02</span>
+          <div>
+            <small>Next step</small>
+            <h2>Continue to verification documents</h2>
+            <p>Your profile is saved. Add a private supporting file to complete this part of your expert setup.</p>
+          </div>
+          <span className="expert-next-action">Go to verification <ArrowRight aria-hidden /></span>
+        </button>
+      )}
+      <nav className="tab-nav expert-tab-nav" aria-label="Expert setup steps">
         {([
-          { key: "profile", icon: Store, label: "Profile" },
-          { key: "verification", icon: ShieldCheck, label: "Verification" },
-          { key: "services", icon: Plus, label: "Services" },
-          { key: "availability", icon: CalendarDays, label: "Availability" },
-          { key: "earnings", icon: Banknote, label: "Earnings" },
-        ] as const).map(({ key, icon: Icon, label }) => (
+          { key: "profile", icon: Store, label: "Profile", step: "01" },
+          { key: "documents", icon: FileCheck2, label: "Verification documents", step: "02" },
+          { key: "services", icon: Plus, label: "Services", step: "03" },
+          { key: "availability", icon: CalendarDays, label: "Availability", step: "04" },
+          { key: "earnings", icon: Banknote, label: "Earnings", step: null },
+        ] as const).map(({ key, icon: Icon, label, step }) => (
           <button
             className={tab === key ? "active" : ""}
             key={key}
             onClick={() => setTab(key)}
           >
-            <Icon size={18} /> {label}
+            {step ? <span className="expert-tab-number">{step}</span> : <Icon size={18} />}
+            <span>{label}</span>
           </button>
         ))}
       </nav>
@@ -103,18 +119,24 @@ export default function ExpertWorkspacePage() {
           profile={profile}
           specializations={specializations}
           onSaved={async (successMessage = "Expert profile saved.") => {
+            const isFirstProfile = !profile
             await load()
-            notify(successMessage)
+            if (isFirstProfile) {
+              setTab("documents")
+              notify("Profile saved. Next, add a verification document.")
+            } else {
+              notify(successMessage)
+            }
           }}
           onError={setError}
         />
       )}
-      {tab === "verification" && (
-        <VerificationPanel
+      {tab === "documents" && (
+        <DocumentsPanel
           profile={profile}
           onUploaded={async () => {
             await load()
-            notify("Document uploaded securely and submitted for review.")
+            notify("Document uploaded securely.")
           }}
           onError={setError}
         />
@@ -325,7 +347,7 @@ function ProfileForm({
   )
 }
 
-function VerificationPanel({
+function DocumentsPanel({
   profile,
   onUploaded,
   onError,
@@ -335,6 +357,16 @@ function VerificationPanel({
   onError: (error: unknown) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const download = async (document: ExpertDocument) => {
+    try {
+      await downloadApiFile(
+        document.fileUrl,
+        document.originalName || `expert-document-${document.id}`,
+      )
+    } catch (caught) {
+      onError(caught)
+    }
+  }
   const upload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = event.currentTarget
@@ -361,27 +393,21 @@ function VerificationPanel({
         <FileCheck2 />
         <h2>Create your profile first</h2>
         <p>
-          We need your professional details before accepting verification
-          documents.
+          Save your professional details before uploading supporting documents.
         </p>
       </div>
     )
   return (
+    <>
     <div className="content-card verification-panel">
       <div>
-        <StatusBadge value={profile.verificationStatus || "not_submitted"} />
-        <h2>Expert verification</h2>
+        <h2>Verification documents</h2>
         <p>
-          Upload evidence relevant to the services you plan to offer. Files are
-          private and accessible only to you and administrators. Verification is
-          optional and is not required to publish your profile, services, or apply
-          for jobs.
+          Upload a resume, portfolio evidence, license, identity document, or
+          certificate relevant to the services you offer. Files remain private
+          and are accessible only to you and authorized administrators. Uploading
+          does not delay or hide your published profile.
         </p>
-        {profile.verificationStatus === "verified" && (
-          <div className="alert alert-success">
-            <BadgeCheck /> Your profile is verified.
-          </div>
-        )}
       </div>
       <form className="form-stack" onSubmit={upload}>
         <Field label="Document type">
@@ -406,7 +432,38 @@ function VerificationPanel({
         </Button>
       </form>
     </div>
+    <div className="content-card">
+      <div className="section-title">
+        <div>
+          <h2>Your uploaded documents</h2>
+          <p>These are the files currently attached to your expert account.</p>
+        </div>
+        <span className="tag">{profile.documents?.length ?? 0} uploaded</span>
+      </div>
+      {profile.documents?.length ? (
+        <div className="document-list">
+          {profile.documents.map((document) => (
+            <article className="document-row" key={document.id}>
+              <div>
+                <strong>{document.originalName || document.type.replace(/_/g, " ")}</strong>
+                <small>{document.type.replace(/_/g, " ")} · {formatDate(document.createdAt)}{document.sizeBytes ? ` · ${formatFileSize(document.sizeBytes)}` : ""}</small>
+              </div>
+              <Button variant="ghost" onClick={() => void download(document)}>View / download</Button>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">No documents uploaded yet.</p>
+      )}
+    </div>
+    </>
   )
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function ServicesPanel({

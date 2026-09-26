@@ -75,6 +75,10 @@ export async function api<T>(
 
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
+    // Marketplace and dashboard responses change after status mutations. Do
+    // not let a browser or intermediary reuse a list captured before a job,
+    // booking, or payment changed state.
+    cache: requestOptions.cache ?? "no-store",
     headers,
     credentials: "include",
     ...(body === undefined

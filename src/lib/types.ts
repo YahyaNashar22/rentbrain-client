@@ -61,10 +61,20 @@ export type Expert = {
   averageRating: string
   reviewCount: number
   completedBookings: number
-  verificationStatus?: "not_submitted" | "pending" | "verified" | "rejected"
   isPublished?: boolean
   specializations?: Specialization[]
   services?: Service[]
+  documents?: ExpertDocument[]
+}
+
+export type ExpertDocument = {
+  id: number
+  type: string
+  fileUrl: string
+  originalName?: string | null
+  mimeType?: string | null
+  sizeBytes?: number | null
+  createdAt: string
 }
 
 export type Job = {

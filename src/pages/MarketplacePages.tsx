@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import {
-  BadgeCheck,
   CalendarDays,
   Clock3,
   Languages,
@@ -151,9 +150,6 @@ function ExpertCard({ expert }: { expert: Expert }) {
     <article className="expert-card">
       <div className="expert-top">
         <Avatar src={assetUrl(expert.avatarUrl)} name={name} size="large" />
-        {expert.verificationStatus === "verified" && <span className="verified-chip">
-          <BadgeCheck size={16} /> Credentials verified
-        </span>}
       </div>
       <h2>{name}</h2>
       <p className="expert-title">{expert.professionalTitle}</p>
@@ -367,9 +363,6 @@ export function ExpertDetailPage() {
       <div className="profile-hero">
         <Avatar src={assetUrl(expert.avatarUrl)} name={name} size="large" />
         <div>
-          {expert.verificationStatus === "verified" && <div className="verified-chip">
-            <BadgeCheck size={16} /> Credentials verified
-          </div>}
           <h1>{name}</h1>
           <h2>{expert.professionalTitle}</h2>
           <div className="profile-facts">
