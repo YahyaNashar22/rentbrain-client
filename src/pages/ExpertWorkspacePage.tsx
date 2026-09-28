@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import {
   ArrowRight,
   Banknote,
@@ -26,6 +26,34 @@ import type { Category, Expert, ExpertDocument, Service, Specialization } from "
 
 type Tab = "profile" | "services" | "availability" | "documents" | "earnings"
 
+const nextTabs: Record<Tab, { key: Tab; label: string; hint: string }> = {
+  profile: {
+    key: "documents",
+    label: "Verification documents",
+    hint: "Add a resume, portfolio, or another supporting document.",
+  },
+  documents: {
+    key: "services",
+    label: "Services",
+    hint: "Create the services clients can discover and book.",
+  },
+  services: {
+    key: "availability",
+    label: "Availability",
+    hint: "Choose when clients can book sessions with you.",
+  },
+  availability: {
+    key: "earnings",
+    label: "Earnings",
+    hint: "Review payments, commissions, and payout activity.",
+  },
+  earnings: {
+    key: "profile",
+    label: "Back to profile",
+    hint: "Review or update your public expert information.",
+  },
+}
+
 export default function ExpertWorkspacePage() {
   const [profile, setProfile] = useState<Expert | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
@@ -34,6 +62,7 @@ export default function ExpertWorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>()
   const [message, setMessage] = useState("")
+  const tabNavRef = useRef<HTMLElement>(null)
   const load = async () => {
     setLoading(true)
     try {
@@ -63,6 +92,13 @@ export default function ExpertWorkspacePage() {
     setMessage(value)
     setError(undefined)
   }
+  const moveToTab = (nextTab: Tab) => {
+    setTab(nextTab)
+    window.requestAnimationFrame(() => {
+      tabNavRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+  const nextTab = nextTabs[tab]
   return (
     <>
       <PageHeader
@@ -96,7 +132,7 @@ export default function ExpertWorkspacePage() {
           <span className="expert-next-action">Go to verification <ArrowRight aria-hidden /></span>
         </button>
       )}
-      <nav className="tab-nav expert-tab-nav" aria-label="Expert setup steps">
+      <nav ref={tabNavRef} className="tab-nav expert-tab-nav" aria-label="Expert setup steps">
         {([
           { key: "profile", icon: Store, label: "Profile", step: "01" },
           { key: "documents", icon: FileCheck2, label: "Verification documents", step: "02" },
@@ -161,6 +197,21 @@ export default function ExpertWorkspacePage() {
         />
       )}
       {tab === "earnings" && <EarningsDashboard />}
+      <div className="expert-tab-footer">
+        <div>
+          <small>{tab === "earnings" ? "Review again" : "Next step"}</small>
+          <strong>{nextTab.label}</strong>
+          <p>{nextTab.hint}</p>
+        </div>
+        <Button
+          type="button"
+          disabled={tab === "profile" && !profile}
+          onClick={() => moveToTab(nextTab.key)}
+        >
+          {tab === "earnings" ? nextTab.label : `Continue to ${nextTab.label}`}
+          <ArrowRight aria-hidden size={18} />
+        </Button>
+      </div>
     </>
   )
 }

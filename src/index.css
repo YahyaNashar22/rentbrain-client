@@ -338,6 +338,11 @@ textarea.control { resize: vertical; }
 .expert-tab-nav button:last-child { border-right: 0; }
 .expert-tab-number { width: 27px; height: 27px; display: grid; place-items: center; border: 2px solid currentColor; background: var(--white); color: var(--navy); font: 800 11px "Manrope"; }
 .expert-tab-nav button.active .expert-tab-number { color: var(--navy); background: var(--sky); }
+.expert-tab-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 25px; padding: 20px 22px; border: var(--border); background: var(--frost); box-shadow: 5px 5px 0 var(--navy); }
+.expert-tab-footer small { display: block; margin-bottom: 3px; color: var(--royal); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+.expert-tab-footer strong { display: block; font: 800 19px "Manrope"; }
+.expert-tab-footer p { margin: 3px 0 0; color: var(--ink); font-size: 13px; }
+.expert-tab-footer .btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 9px; }
 .verification-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 35px; }
 .document-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-block: 10px; padding: 12px; border: 2px solid var(--navy); }
 .document-row small { display: block; }
@@ -496,6 +501,8 @@ textarea.control { resize: vertical; }
   .expert-next-step > svg { justify-self: end; }
   .expert-next-action { justify-content: center; }
   .expert-tab-nav button { min-width: max-content; }
+  .expert-tab-footer { align-items: stretch; flex-direction: column; }
+  .expert-tab-footer .btn { justify-content: center; width: 100%; }
   .admin-nav { display: flex; overflow-x: auto; }
   .admin-title { min-width: max-content; }
   .admin-nav button { min-width: max-content; }
