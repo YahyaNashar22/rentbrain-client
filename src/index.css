@@ -306,6 +306,12 @@ textarea.control { resize: vertical; }
 .booking-time span, .booking-info small { color: var(--muted); font-size: 11px; }
 .booking-info h3 { margin: 7px 0 3px; }
 .booking-info p { margin: 0; color: var(--muted); font-size: 13px; }
+.booking-contact { display: grid; gap: 3px; margin: 12px 0; padding: 11px 12px; border-left: 4px solid var(--royal); background: var(--frost); }
+.booking-contact > span { color: var(--royal); font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
+.booking-contact > strong { font-size: 15px; }
+.booking-contact > div { display: flex; flex-wrap: wrap; gap: 7px 16px; margin-top: 3px; }
+.booking-contact a { display: inline-flex; align-items: center; gap: 5px; color: var(--navy); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.booking-contact small { color: var(--muted); font-size: 11px; }
 .review-form { margin-top: 20px; }
 .notification-list { display: grid; gap: 13px; }
 .notification-list article { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: start; padding: 20px; border: 2px solid var(--navy); }

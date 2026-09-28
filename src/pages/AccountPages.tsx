@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   CreditCard,
   KeyRound,
+  Mail,
+  Phone,
   ShieldCheck,
   Star,
   UserRound,
@@ -501,6 +503,7 @@ export function BookingsPage() {
         <div className="booking-list">
           {bookings.map((booking) => {
             const isExpert = booking.expertId === user?.id
+            const contact = isExpert ? booking.client : booking.expert
             const payment = payments.find(
               (item) => item.booking?.id === booking.id,
             )?.payment
@@ -513,12 +516,36 @@ export function BookingsPage() {
                 </div>
                 <div className="booking-info">
                   <StatusBadge value={booking.status} />
-                  <h3>{isExpert ? "Expert session" : "Booked service"}</h3>
+                  <h3>{booking.service?.title || (isExpert ? "Expert session" : "Booked service")}</h3>
                   <p>
                     {isExpert
                       ? "You are providing this session."
                       : "You are the client for this session."}
                   </p>
+                  {contact && (
+                    <div className="booking-contact">
+                      <span>{isExpert ? "Requested by" : "Your expert"}</span>
+                      <strong>{contact.firstName} {contact.lastName}</strong>
+                      {booking.contactDetailsAvailable ? (
+                        <div>
+                          {contact.email && (
+                            <a href={`mailto:${contact.email}`}>
+                              <Mail aria-hidden size={15} /> {contact.email}
+                            </a>
+                          )}
+                          {contact.phone ? (
+                            <a href={`tel:${contact.phone}`}>
+                              <Phone aria-hidden size={15} /> {contact.phone}
+                            </a>
+                          ) : (
+                            <small>No phone number provided</small>
+                          )}
+                        </div>
+                      ) : (
+                        <small>Contact details unlock after payment is confirmed.</small>
+                      )}
+                    </div>
+                  )}
                   <small>
                     {formatMoney(booking.total, booking.currency)}
                     {payment

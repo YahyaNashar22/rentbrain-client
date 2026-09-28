@@ -121,6 +121,21 @@ export type Booking = {
   currency: string
   status: string
   cancellationReason?: string | null
+  contactDetailsAvailable?: boolean
+  service?: {
+    id: number
+    title: string
+  }
+  client?: BookingContact
+  expert?: BookingContact
+}
+
+export type BookingContact = {
+  id: number
+  firstName: string
+  lastName: string
+  email: string | null
+  phone: string | null
 }
 
 export type Notification = {
